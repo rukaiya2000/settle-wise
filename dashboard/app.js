@@ -80,6 +80,7 @@ function renderTable() {
           <td><span class="status ${d.status}">${d.status.replace(/_/g, " ")}</span></td>
           <td>
             <button class="row-run" data-call="${d.id}">Call</button>
+            <button class="row-run ghost" data-sms="${d.id}">SMS</button>
             <button class="row-run ghost" data-run="${d.id}">Trigger agent</button>
           </td>
         </tr>
@@ -266,8 +267,37 @@ document.querySelector("#callAgentButton").addEventListener("click", () => {
   }
 });
 
+document.querySelector("#smsBorrowerButton").addEventListener("click", async (e) => {
+  const debtId = window.location.hash.replace(/^#\/?/, "");
+  const debt = debts.find((d) => d.id === debtId);
+  const name = document.querySelector("#progName").textContent || "this borrower";
+  const phone = document.querySelector("#progPhone").textContent || "their number";
+  const text = promptSms(name, phone, debt ? debt.amount_due : 0);
+  if (!text) return;
+
+  const button = e.target;
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = "Sending...";
+  setCallStatus("connecting", "Sending SMS...");
+  try {
+    const res = await sendSms(debtId, text);
+    setCallStatus("connected", `SMS sent to ${res.name} at ${res.to}`);
+  } catch (err) {
+    setCallStatus("error", `SMS failed: ${err.message}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+    await loadProgress(debtId);
+  }
+});
+
 document.querySelector("#callBorrowerButton").addEventListener("click", async (e) => {
   const debtId = window.location.hash.replace(/^#\/?/, "");
+  const name = document.querySelector("#progName").textContent || "this borrower";
+  const phone = document.querySelector("#progPhone").textContent || "their number";
+  if (!confirmCall(name, phone)) return;
+
   const button = e.target;
   button.disabled = true;
   const original = button.textContent;
@@ -314,10 +344,59 @@ async function callBorrower(debtId) {
   return api(`/api/debts/${debtId}/call`, { method: "POST" });
 }
 
+// Dialing rings a real phone and can't be taken back, so always confirm the
+// name and number first. Returns false if the user cancels.
+function confirmCall(name, phone) {
+  return window.confirm(
+    `Place a real phone call to ${name} at ${phone}?\n\n` +
+      `Their phone will ring and the agent will start negotiating.`,
+  );
+}
+
+async function sendSms(debtId, body) {
+  return api(`/api/debts/${debtId}/sms`, {
+    method: "POST",
+    body: JSON.stringify({ body, type: "custom" }),
+  });
+}
+
+// Texting is outward-facing and can't be recalled, so show the exact message
+// and let it be edited before sending. Returns the text, or null to cancel.
+function promptSms(name, phone, amountDue) {
+  const suggested = `Hi ${name}, this is SettleWise about the ${money(amountDue)} outstanding on your account. Please get in touch to arrange payment.`;
+  return window.prompt(`Send an SMS to ${name} at ${phone}:`, suggested);
+}
+
 document.querySelector("#debtTable").addEventListener("click", async (e) => {
+  const smsBtn = e.target.closest("[data-sms]");
+  if (smsBtn) {
+    e.stopPropagation();
+    const debt = debts.find((d) => d.id === smsBtn.dataset.sms);
+    if (!debt) return;
+    const text = promptSms(debt.name, debt.phone, debt.amount_due);
+    if (!text) return;
+
+    smsBtn.disabled = true;
+    const original = smsBtn.textContent;
+    smsBtn.textContent = "Sending...";
+    try {
+      const res = await sendSms(debt.id, text);
+      window.alert(`SMS sent to ${res.name} at ${res.to}`);
+    } catch (err) {
+      window.alert(`SMS failed: ${err.message}`);
+    } finally {
+      smsBtn.disabled = false;
+      smsBtn.textContent = original;
+    }
+    return;
+  }
+
   const callBtn = e.target.closest("[data-call]");
   if (callBtn) {
     e.stopPropagation();
+    const debt = debts.find((d) => d.id === callBtn.dataset.call);
+    if (!confirmCall(debt ? debt.name : "this borrower", debt ? debt.phone : "their number")) return;
+
     callBtn.disabled = true;
     const original = callBtn.textContent;
     callBtn.textContent = "Calling...";

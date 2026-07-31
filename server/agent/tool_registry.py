@@ -89,6 +89,24 @@ TOOL_DEFS = [
         "fn": agent_tools.send_sms_payment_link,
     },
     {
+        "name": "send_sms",
+        "description": (
+            "Text the borrower right now, during the call - for example to confirm in writing "
+            "what was just agreed, or to send details they asked to have in writing. "
+            "Sends immediately to their real phone. Use send_sms_payment_link instead when the "
+            "message is a payment link, and schedule_sms_reminder to book one for later."
+        ),
+        "properties": {
+            "debt_id": {"type": "string"},
+            "body": {
+                "type": "string",
+                "description": "The message text. Keep it to one or two short, professional sentences.",
+            },
+        },
+        "required": ["debt_id", "body"],
+        "fn": agent_tools.send_sms_now,
+    },
+    {
         "name": "schedule_sms_reminder",
         "description": "Book a future SMS reminder for an unpaid payment link.",
         "properties": {

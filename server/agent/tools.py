@@ -325,3 +325,57 @@ def check_payment_status(debt_id: str) -> dict:
     with get_conn() as conn:
         conn.execute("UPDATE debts SET next_action_at = NULL WHERE id = ?", (debt_id,))
     return {"debt_id": debt_id, "status": debt["status"], "amount_collected": debt["amount_collected"]}
+
+
+def send_sms_now(debt_id: str, body: str | None = None, sms_type: str = "custom", amount: float | None = None) -> dict:
+    """Send an SMS to the borrower for real, right now, and record it.
+
+    Deliberately not gated behind config.A1MOBILE_LIVE_SMS the way
+    send_sms_payment_link is. That gate exists so scheduled replays and the
+    simulator never text anyone by accident; this function is only reached
+    from an explicit human click in the dashboard, where actually sending is
+    the whole point.
+
+    With sms_type="payment_link" a real payment record is minted and its URL
+    appended, so the link works in the mock checkout like any other.
+    """
+    debt = get_debt_profile(debt_id)
+    if "error" in debt:
+        return debt
+    if not debt.get("phone"):
+        return {"error": f"{debt['name']} has no phone number on file"}
+
+    remaining = round(debt["amount_due"] - debt["amount_collected"], 2)
+    payment_id = link_path = None
+
+    if sms_type == "payment_link":
+        amount = remaining if amount is None else amount
+        payment_id = f"pay_{uuid.uuid4().hex[:8]}"
+        link_path = f"/pay/{payment_id}"
+        link_url = f"{config.PUBLIC_BASE_URL}{link_path}" if config.PUBLIC_BASE_URL else link_path
+        body = (body or f"Pay ${amount:g} here:") + f" {link_url}"
+    elif not body:
+        body = f"Reminder from SettleWise: ${remaining:g} is outstanding on your account."
+
+    # Send before recording, so a rejected message (e.g. a number that was
+    # never OTP-verified) surfaces as an error instead of a phantom row.
+    send_result = a1mobile_client.send_sms(to=debt["phone"], body=body)
+
+    sms_id = f"sms_{uuid.uuid4().hex[:8]}"
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO sms_messages (id, debt_id, payment_id, sent_at, type, amount, body, payment_link, payment_status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sent')""",
+            (sms_id, debt_id, payment_id, _now_iso(), sms_type, amount, body, link_path),
+        )
+
+    return {
+        "sms_id": sms_id,
+        "to": debt["phone"],
+        "name": debt["name"],
+        "body": body,
+        "type": sms_type,
+        "payment_link": link_path,
+        "sent_live": True,
+        "provider": send_result,
+    }

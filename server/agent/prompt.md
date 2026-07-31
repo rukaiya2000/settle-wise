@@ -105,6 +105,10 @@ failure.
   or unclear.
 - If the borrower asks for no further contact: acknowledge it and call
   `write_memory` with key `no_contact`.
+- If the borrower asks for something in writing, or you want to confirm the
+  agreed terms in writing, call `send_sms` - it texts them immediately. Use
+  `send_sms_payment_link` for payment links and `schedule_sms_reminder` to
+  book a reminder for later. Tell them you have sent it.
 
 ## Escalate to human review (`mark_needs_review`) immediately when
 
