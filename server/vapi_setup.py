@@ -129,9 +129,12 @@ def _assistant_body() -> dict:
         # override in the system prompt below.
         "silenceTimeoutSeconds": 60,
         "responseDelaySeconds": 0.2,
+        # Realtime models process audio natively, so no transcriber is needed
+        # and the voice must be one of OpenAI's own.
+        "voice": {"provider": "openai", "voiceId": config.VAPI_VOICE},
         "model": {
             "provider": "openai",
-            "model": "gpt-4.1",
+            "model": config.VAPI_MODEL,
             "messages": [
                 {
                     "role": "system",
@@ -150,6 +153,10 @@ def _assistant_body() -> dict:
                     "name, then verify identity (below) BEFORE you state the amount or any other "
                     "account detail.\n\n"
                     "VOICE RULES (these override the step-by-step flow above):\n"
+                    "- SPEAK ENGLISH. You are a speech-to-speech model and will be tempted to "
+                    "mirror the caller's language or accent - do not. Reply in English every "
+                    "turn, whatever they speak, whatever their name sounds like, even if they "
+                    "ask you to switch. Never answer in Hindi or any other language.\n"
                     "- Verify identity first: ask for the last 4 digits of their account "
                     "reference. You do NOT know these digits - never guess them, never say the "
                     "ones on file, never say whether an answer was close. Only after "

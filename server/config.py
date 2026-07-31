@@ -22,6 +22,15 @@ VAPI_CREDENTIAL_ID = os.getenv("VAPI_CREDENTIAL_ID", "")
 VAPI_PHONE_NUMBER_ID = os.getenv("VAPI_PHONE_NUMBER_ID", "")
 VAPI_ASSISTANT_ID = os.getenv("VAPI_ASSISTANT_ID", "")
 
+# Speech-to-speech: the model handles audio in and out itself, so there's no
+# STT -> LLM -> TTS round trip between the borrower speaking and the agent
+# replying. NOT the same name as OPENAI_REALTIME_MODEL - Vapi only accepts
+# models from its own list and rejects "gpt-realtime-2.1".
+# Set VAPI_MODEL=gpt-4.1 in .env to fall back to the cascade pipeline.
+VAPI_MODEL = os.getenv("VAPI_MODEL", "gpt-realtime-2025-08-28")
+# Realtime only supports OpenAI's own voices: alloy, echo, shimmer, marin, cedar.
+VAPI_VOICE = os.getenv("VAPI_VOICE", "alloy")
+
 # No trailing slash, e.g. https://abcd1234.ngrok-free.app
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 

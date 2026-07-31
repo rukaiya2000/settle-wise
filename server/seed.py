@@ -19,6 +19,9 @@ def reset_db():
         conn.execute("DELETE FROM calls")
         conn.execute("DELETE FROM sms_messages")
         conn.execute("DELETE FROM memory")
+        # Without this the previous run's tool trace survives the reset and
+        # shows up under "what the agent did" on the next call.
+        conn.execute("DELETE FROM agent_actions")
         conn.execute("DELETE FROM debts")
     seed()
 
