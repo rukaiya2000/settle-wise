@@ -23,11 +23,11 @@
       <table class="debt-table">
         <thead>
           <tr>
-            <th>Personal name</th>
-            <th>Phone number</th>
-            <th>Amount due</th>
-            <th>Due date</th>
+            <th>Borrower</th>
+            <th>Outstanding</th>
+            <th>Due</th>
             <th>Status</th>
+            <th>Next action</th>
             <th></th>
           </tr>
         </thead>
@@ -47,11 +47,12 @@
         <div class="progress-actions">
           <button id="callBorrowerButton">Call borrower</button>
           <button id="smsBorrowerButton" class="ghost">Send SMS</button>
-          <button id="callAgentButton" class="ghost">Call phone</button>
         </div>
       </div>
 
       <div id="callStatus" class="call-status hidden"></div>
+
+      <dl class="facts" id="progFacts"></dl>
 
       <div class="metrics-row" id="progMetrics"></div>
 

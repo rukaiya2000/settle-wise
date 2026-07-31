@@ -53,6 +53,52 @@ function zoneLabel(date) {
   return (parts.find((p) => p.type === "timeZoneName") || {}).value || "";
 }
 
+// due_date / breach_date are plain "YYYY-MM-DD" with no time component, so
+// they can't go through formatClock (which expects a timestamp). Parsed as
+// UTC and rendered as UTC so the date never shifts by a day for viewers
+// west or east of the demo timezone.
+function formatDate(iso) {
+  if (!iso) return "-";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  const [, y, mo, d] = m;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(Date.UTC(+y, +mo - 1, +d)));
+}
+
+// Days from the DEMO clock, not real today - the whole point of the demo
+// clock is that "now" is whatever it says.
+function daysUntil(iso) {
+  if (!iso || !demoClock) return null;
+  const target = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  const now = /^(\d{4})-(\d{2})-(\d{2})/.exec(demoClock.current_time);
+  if (!target || !now) return null;
+  const t = Date.UTC(+target[1], +target[2] - 1, +target[3]);
+  const n = Date.UTC(+now[1], +now[2] - 1, +now[3]);
+  return Math.round((t - n) / 86400000);
+}
+
+function dueLabel(iso) {
+  const days = daysUntil(iso);
+  if (days === null) return "";
+  if (days < 0) return `${-days}d overdue`;
+  if (days === 0) return "due today";
+  if (days === 1) return "tomorrow";
+  return `in ${days}d`;
+}
+
+function dueClass(iso) {
+  const days = daysUntil(iso);
+  if (days === null) return "";
+  if (days < 0) return "overdue";
+  if (days <= 3) return "urgent";
+  return "";
+}
+
 async function loadDebts() {
   debts = await api("/api/debts");
   renderTable();
@@ -70,23 +116,54 @@ function renderTable() {
   });
 
   document.querySelector("#debtTable").innerHTML = rows
-    .map(
-      (d) => `
+    .map((d) => {
+      const outstanding = (d.amount_due || 0) - (d.amount_collected || 0);
+      // Only worth showing the original total when part of it is already paid.
+      const collectedNote =
+        d.amount_collected > 0 ? `<div class="subtle">${money(d.amount_collected)} of ${money(d.amount_due)} paid</div>` : "";
+      const nextAt = d.next_action_at ? `<div class="subtle">${formatClock(d.next_action_at)}</div>` : "";
+      const nextAction = d.next_action
+        ? `${d.next_action.replace(/_/g, " ")}${nextAt}`
+        : '<span class="subtle">-</span>';
+      return `
         <tr class="clickable" data-id="${d.id}">
-          <td><div class="borrower-name">${d.name}</div></td>
-          <td>${d.phone}</td>
-          <td>${money(d.amount_due)}</td>
-          <td>${d.due_date || "-"}</td>
-          <td><span class="status ${d.status}">${d.status.replace(/_/g, " ")}</span></td>
+          <td>
+            <div class="borrower-name">${d.name}</div>
+            <div class="subtle">${d.phone}</div>
+          </td>
+          <td>
+            <strong>${money(outstanding)}</strong>
+            ${collectedNote}
+          </td>
+          <td>
+            ${formatDate(d.due_date)}
+            <div class="due-note ${dueClass(d.due_date)}">${dueLabel(d.due_date)}</div>
+          </td>
+          <td>
+            <span class="status ${d.status}">${d.status.replace(/_/g, " ")}</span>
+            ${["needs_review", "missed", "no_answer", "scheduled", "callback_requested"].includes(d.status) && d.last_call_summary ? `<div class="status-reason">${d.last_call_summary}</div>` : ""}
+          </td>
+          <td class="next-action">${nextAction}</td>
           <td>
             <button class="row-run" data-call="${d.id}">Call</button>
             <button class="row-run ghost" data-sms="${d.id}">SMS</button>
-            <button class="row-run ghost" data-run="${d.id}">Trigger agent</button>
           </td>
         </tr>
-      `,
-    )
+      `;
+    })
     .join("");
+}
+
+// "SW-6693-4520" -> "SW-••••-4520". Masks every digit but the last four,
+// keeping the separators so the shape of the reference is still recognisable.
+function maskRef(ref) {
+  if (!ref) return "";
+  const total = (ref.match(/\d/g) || []).length;
+  let seen = 0;
+  return ref.replace(/\d/g, (ch) => {
+    seen += 1;
+    return seen > total - 4 ? ch : "•";
+  });
 }
 
 function feedItem(title, meta, body) {
@@ -103,15 +180,43 @@ async function loadProgress(debtId) {
   // Kept as the bare number - the call/SMS confirm dialogs read this.
   document.querySelector("#progPhone").textContent = detail.debt.phone;
 
-  // Staff-only. The agent never sees the reference (it verifies the last 4
-  // digits through a tool), but whoever is testing a call needs to know what
-  // to say when asked.
+  // Masked deliberately: the last 4 is the only part anyone needs (it's what
+  // the agent asks for), and showing the whole reference would leak the full
+  // value into any screenshot or screen-share of this page.
   const ref = detail.debt.account_ref;
   document.querySelector("#progRef").innerHTML = ref
-    ? `Account ref ${ref} &middot; last 4: <strong>${ref.replace(/\D/g, "").slice(-4)}</strong>`
+    ? `Account ref <span class="ref-value">${maskRef(ref)}</span>`
     : "";
 
+  // The detail page previously jumped straight from the name to the metric
+  // cards, so the two things an operator most needs - when it's due and what
+  // happens next - were nowhere on the page.
+  const d = detail.debt;
+  // A status like "needs review" is alarming but meaningless on its own -
+  // the reason was previously buried further down the page, so the obvious
+  // (wrong) assumption was that it related to the dates beside it.
+  const flagged = ["needs_review", "missed", "no_answer", "scheduled", "callback_requested"].includes(d.status);
+  const statusReason =
+    flagged && d.last_call_summary ? `<div class="status-reason">${d.last_call_summary}</div>` : "";
+
+  const facts = [
+    ["Status", `<span class="status ${d.status}">${d.status.replace(/_/g, " ")}</span>${statusReason}`],
+    ["Due date", `${formatDate(d.due_date)} <span class="due-note ${dueClass(d.due_date)}">${dueLabel(d.due_date)}</span>`],
+    ["Breach date", `${formatDate(d.breach_date)} <span class="due-note ${dueClass(d.breach_date)}">${dueLabel(d.breach_date)}</span>`],
+    [
+      "Next action",
+      d.next_action
+        ? `${d.next_action.replace(/_/g, " ")}${d.next_action_at ? ` <span class="subtle">${formatClock(d.next_action_at)}</span>` : ""}`
+        : "<span class='subtle'>none scheduled</span>",
+    ],
+    ["Salary date", d.salary_date || "<span class='subtle'>unknown</span>"],
+  ];
+  document.querySelector("#progFacts").innerHTML = facts
+    .map(([k, v]) => `<div class="fact"><dt>${k}</dt><dd>${v}</dd></div>`)
+    .join("");
+
   const cards = [
+    { label: "Outstanding", value: money(progress.amount_due - progress.amount_collected) },
     { label: "Amount due", value: money(progress.amount_due) },
     { label: "Collected", value: money(progress.amount_collected) },
     { label: "Promised", value: money(progress.amount_promised) },
@@ -253,43 +358,12 @@ function renderLastCall(detail) {
     : '<div class="feed-empty">No recorded agent actions yet.</div>';
 }
 
-async function runAgent(debtId) {
-  return api(`/api/debts/${debtId}/call-agent`, { method: "POST" });
-}
-
-function showRunResult(result) {
-  window.alert(`Outbound call started: ${JSON.stringify(result)}`);
-}
-
 function setCallStatus(state, text) {
   const el = document.querySelector("#callStatus");
   el.classList.remove("hidden", "connecting", "connected", "error");
   if (state) el.classList.add(state);
   el.textContent = text || "";
 }
-
-async function startPhoneCall(debtId) {
-  const button = document.querySelector("#callAgentButton");
-  button.disabled = true;
-  button.textContent = "Calling...";
-  setCallStatus("connecting", "Placing phone call...");
-
-  try {
-    const result = await runAgent(debtId);
-    setCallStatus("connected", `Phone call started for ${result.phone}`);
-    await loadProgress(debtId);
-  } catch (err) {
-    setCallStatus("error", `Call failed: ${err.message}`);
-  } finally {
-    button.textContent = "Call phone";
-    button.disabled = false;
-  }
-}
-
-document.querySelector("#callAgentButton").addEventListener("click", () => {
-  const debtId = window.location.hash.replace(/^#\/?/, "");
-  startPhoneCall(debtId);
-});
 
 document.querySelector("#smsBorrowerButton").addEventListener("click", async (e) => {
   const debtId = window.location.hash.replace(/^#\/?/, "");
@@ -432,21 +506,6 @@ document.querySelector("#debtTable").addEventListener("click", async (e) => {
     } finally {
       callBtn.disabled = false;
       callBtn.textContent = original;
-    }
-    return;
-  }
-
-  const runBtn = e.target.closest("[data-run]");
-  if (runBtn) {
-    e.stopPropagation();
-    runBtn.disabled = true;
-    runBtn.textContent = "Running...";
-    try {
-      const result = await runAgent(runBtn.dataset.run);
-      showRunResult(result);
-      window.location.hash = `/${runBtn.dataset.run}`;
-    } finally {
-      await loadDebts();
     }
     return;
   }

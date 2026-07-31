@@ -361,3 +361,75 @@ button.ghost {
   color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+
+/* --- Key facts strip on the borrower page --- */
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 0 0 20px;
+}
+
+.fact {
+  background: var(--panel);
+  padding: 12px 14px;
+}
+
+.fact dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--subtle);
+  margin-bottom: 4px;
+}
+
+.fact dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+/* How close a date is matters more than the date itself when triaging, so
+   urgency is colour-coded rather than left for the reader to work out. */
+.due-note {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--subtle);
+  text-transform: none;
+}
+
+.due-note.urgent { color: var(--amber); }
+.due-note.overdue { color: var(--red); }
+
+.next-action {
+  font-size: 13px;
+  text-transform: capitalize;
+}
+
+.debt-table td .subtle { text-transform: none; font-weight: 400; }
+
+/* A status badge alone doesn't say why. Show the reason with it so
+   "needs review" isn't mistaken for something about the dates next to it. */
+.status-reason {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--subtle);
+  text-transform: none;
+  margin-top: 4px;
+  max-width: 260px;
+  line-height: 1.4;
+}
+
+/* Account reference: masked to the last 4, which is all the agent ever asks
+   for. Monospace so the visible digits are easy to read off during a call. */
+.ref-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text);
+  letter-spacing: 0.5px;
+}
