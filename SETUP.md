@@ -110,9 +110,40 @@ realtime speech-to-speech model (`OPENAI_REALTIME_MODEL`, direct API key -
 the hackathon gateway is an HTTP-only Lambda Function URL and can't proxy a
 WebSocket connection, so it isn't used here). Every debt fact, offer, payment
 link, memory write, dispute, or escalation goes through a tool call in
-`server/agent/tools.py` - the system prompt (`server/agent/prompt.py`) is
-built directly from `md/agent-behavior.md` and `md/compliance-guardrails.md`
-and instructs the model to never state numbers from its own reasoning.
+`server/agent/tools.py`.
+
+## The prompt, hard rules, and ReAct loop
+
+`server/agent/prompt.md` *is* the system prompt - edit it directly, no code
+change needed (`server/agent/__init__.py` loads it at import time, dropping
+everything above the `---` separator, which is documentation about the file
+rather than part of the prompt). It's built from `md/agent-behavior.md` and
+`md/compliance-guardrails.md`, and explicitly implements a ReAct loop
+(Reason -> Act -> Observe): the model must reason privately, then call a
+tool, then treat the tool's return value as the only truth before speaking -
+it can never state a number it didn't just get from a tool. Hard rules
+(never say "you'll be sued", never exceed the discount cap, stop instantly
+on a dispute, etc.) are enforced twice: once in the prompt, and again in
+code (`server/offer_engine.py` caps discounts regardless of what's asked
+for; `apply_discount` returns `approved: false` past policy) so the model
+can't talk its way around them.
+
+`server/agent/tool_registry.py` is the single source of truth for the tool
+surface (name, JSON schema, implementation) - both the live voice pipeline
+and the text tester below build their tool list from it, so they can never
+drift apart.
+
+Test the negotiation without placing a phone call:
+
+```bash
+.venv/bin/python -m server.agent.console debt_002
+```
+
+Type as the borrower; each turn prints the agent's `[Action]` (tool called)
+and `[Observation]` (what it got back) before its reply - the actual ReAct
+trace, backed by the real database (seed data, offers, policy limits).
+`debt_002`'s phone number in `data/seed.json` is set to a real verified
+number for live-call testing too - swap in your own before a real test.
 
 ## Simulated demo loop (no live call needed)
 

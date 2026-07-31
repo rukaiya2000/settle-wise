@@ -36,8 +36,8 @@ from pipecat.workers.runner import WorkerRunner
 
 from .. import config
 from ..db import get_conn
-from . import tools as agent_tools
-from .prompt import SYSTEM_PROMPT
+from . import SYSTEM_PROMPT
+from .tool_registry import TOOL_DEFS
 
 
 def _find_debt_id_by_phone(phone: str | None) -> str | None:
@@ -59,137 +59,13 @@ def _make_handler(fn):
 def _build_tools_schema() -> ToolsSchema:
     schemas = [
         FunctionSchema(
-            name="get_debt_profile",
-            description="Fetch amount due, amount collected/promised, dates, and status for a debt by id.",
-            properties={"debt_id": {"type": "string"}},
-            required=["debt_id"],
-            handler=_make_handler(agent_tools.get_debt_profile),
-        ),
-        FunctionSchema(
-            name="get_memory",
-            description="Get facts previously learned about this borrower (salary date, call preference, prior promises, etc).",
-            properties={"debt_id": {"type": "string"}},
-            required=["debt_id"],
-            handler=_make_handler(agent_tools.get_memory),
-        ),
-        FunctionSchema(
-            name="get_policy",
-            description="Get the collections policy (max discount, min payment-today percent, max installments, allowed call hours).",
-            properties={},
-            required=[],
-            handler=_make_handler(agent_tools.get_policy),
-        ),
-        FunctionSchema(
-            name="check_call_allowed",
-            description="Check whether it is allowed to discuss this debt with the borrower right now.",
-            properties={"debt_id": {"type": "string"}},
-            required=["debt_id"],
-            handler=_make_handler(agent_tools.check_call_allowed),
-        ),
-        FunctionSchema(
-            name="generate_offer_options",
-            description="Get the approved repayment options for this debt (pay today, partial, installment, discount), optionally given what the borrower says they can pay today.",
-            properties={
-                "debt_id": {"type": "string"},
-                "borrower_can_pay_today": {"type": "number"},
-            },
-            required=["debt_id"],
-            handler=_make_handler(agent_tools.generate_offer_options),
-        ),
-        FunctionSchema(
-            name="apply_discount",
-            description="Check whether a requested discount percentage is within policy and get the settled amount.",
-            properties={
-                "debt_id": {"type": "string"},
-                "requested_pct": {"type": "number", "description": "Discount percentage requested, e.g. 10 for 10%"},
-            },
-            required=["debt_id", "requested_pct"],
-            handler=_make_handler(agent_tools.apply_discount),
-        ),
-        FunctionSchema(
-            name="record_call_event",
-            description="Log the outcome of this call before ending it.",
-            properties={
-                "debt_id": {"type": "string"},
-                "outcome": {
-                    "type": "string",
-                    "enum": ["answered", "no_answer", "callback_requested", "promised", "paid", "needs_review"],
-                },
-                "summary": {"type": "string"},
-                "amount_promised": {"type": "number"},
-                "promise_date": {"type": "string"},
-            },
-            required=["debt_id", "outcome", "summary"],
-            handler=_make_handler(agent_tools.record_call_event),
-        ),
-        FunctionSchema(
-            name="send_sms_payment_link",
-            description="Create a payment link for an agreed amount and send it to the borrower.",
-            properties={
-                "debt_id": {"type": "string"},
-                "amount": {"type": "number"},
-                "reason": {"type": "string"},
-            },
-            required=["debt_id", "amount"],
-            handler=_make_handler(agent_tools.send_sms_payment_link),
-        ),
-        FunctionSchema(
-            name="schedule_sms_reminder",
-            description="Book a future SMS reminder for an unpaid payment link.",
-            properties={
-                "debt_id": {"type": "string"},
-                "send_at": {"type": "string", "description": "ISO 8601 datetime"},
-                "message_type": {"type": "string"},
-            },
-            required=["debt_id", "send_at"],
-            handler=_make_handler(agent_tools.schedule_sms_reminder),
-        ),
-        FunctionSchema(
-            name="schedule_next_action",
-            description="Schedule the next workflow action for this debt (e.g. a follow-up call at a specific time).",
-            properties={
-                "debt_id": {"type": "string"},
-                "next_action": {"type": "string"},
-                "next_action_at": {"type": "string", "description": "ISO 8601 datetime"},
-                "reason": {"type": "string"},
-            },
-            required=["debt_id", "next_action", "next_action_at"],
-            handler=_make_handler(agent_tools.schedule_next_action),
-        ),
-        FunctionSchema(
-            name="update_debt_status",
-            description="Update the debt's status and/or next action.",
-            properties={
-                "debt_id": {"type": "string"},
-                "status": {"type": "string"},
-                "last_call_summary": {"type": "string"},
-                "next_action": {"type": "string"},
-                "next_action_at": {"type": "string"},
-            },
-            required=["debt_id", "status"],
-            handler=_make_handler(agent_tools.update_debt_status),
-        ),
-        FunctionSchema(
-            name="write_memory",
-            description="Save a structured, explainable fact learned about the borrower (e.g. salary_date, call_preference, no_contact).",
-            properties={
-                "debt_id": {"type": "string"},
-                "key": {"type": "string"},
-                "value": {"type": "string"},
-            },
-            required=["debt_id", "key", "value"],
-            handler=_make_handler(agent_tools.write_memory),
-        ),
-        FunctionSchema(
-            name="mark_needs_review",
-            description="Stop collection and escalate this debt to human review (dispute, fraud, wrong party, hardship, low confidence, abusive borrower, out-of-policy settlement).",
-            properties={
-                "debt_id": {"type": "string"},
-                "reason": {"type": "string"},
-            },
-            required=["debt_id", "reason"],
-            handler=_make_handler(agent_tools.mark_needs_review),
-        ),
+            name=t["name"],
+            description=t["description"],
+            properties=t["properties"],
+            required=t["required"],
+            handler=_make_handler(t["fn"]),
+        )
+        for t in TOOL_DEFS
     ]
     return ToolsSchema(standard_tools=schemas)
 
