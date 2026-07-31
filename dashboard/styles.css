@@ -77,6 +77,15 @@ button.ghost {
 
 #app { max-width: 1100px; margin: 0 auto; padding: 24px; }
 
+/* .ghost above is tuned for the dark topbar; inside #app the background is
+   light, so the same light-grey text would be unreadable. */
+#app button.ghost {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+#app button.ghost:hover { background: #eef1f4; }
+
 .hidden { display: none !important; }
 
 .metrics-row {
@@ -149,6 +158,10 @@ button.ghost {
   padding: 5px 10px;
   white-space: nowrap;
 }
+
+.row-run + .row-run { margin-left: 6px; }
+
+.progress-actions { display: flex; gap: 8px; }
 
 .progress-header {
   display: flex;

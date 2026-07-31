@@ -54,7 +54,10 @@ function renderTable() {
           <td>${money(d.amount_due)}</td>
           <td>${d.due_date || "-"}</td>
           <td><span class="status ${d.status}">${d.status.replace(/_/g, " ")}</span></td>
-          <td><button class="row-run" data-run="${d.id}">Trigger agent</button></td>
+          <td>
+            <button class="row-run" data-call="${d.id}">Call</button>
+            <button class="row-run ghost" data-run="${d.id}">Trigger agent</button>
+          </td>
         </tr>
       `,
     )
@@ -239,6 +242,24 @@ document.querySelector("#callAgentButton").addEventListener("click", () => {
   }
 });
 
+document.querySelector("#callBorrowerButton").addEventListener("click", async (e) => {
+  const debtId = window.location.hash.replace(/^#\/?/, "");
+  const button = e.target;
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = "Dialing...";
+  setCallStatus("connecting", "Placing call...");
+  try {
+    const res = await callBorrower(debtId);
+    setCallStatus("connected", `Calling ${res.name} at ${res.to} - their phone should ring shortly.`);
+  } catch (err) {
+    setCallStatus("error", `Call failed: ${err.message}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+  }
+});
+
 function setView(view) {
   document.querySelector("#profilesView").classList.toggle("hidden", view !== "profiles");
   document.querySelector("#progressView").classList.toggle("hidden", view !== "progress");
@@ -262,7 +283,32 @@ async function route() {
   }
 }
 
+// Real outbound phone call to the borrower, via Vapi. Distinct from the
+// browser call (WebRTC to your own mic) and from "Trigger agent" (the
+// deterministic simulator, which never dials out).
+async function callBorrower(debtId) {
+  return api(`/api/debts/${debtId}/call`, { method: "POST" });
+}
+
 document.querySelector("#debtTable").addEventListener("click", async (e) => {
+  const callBtn = e.target.closest("[data-call]");
+  if (callBtn) {
+    e.stopPropagation();
+    callBtn.disabled = true;
+    const original = callBtn.textContent;
+    callBtn.textContent = "Calling...";
+    try {
+      const res = await callBorrower(callBtn.dataset.call);
+      window.alert(`Calling ${res.name} at ${res.to}\nStatus: ${res.status}`);
+    } catch (err) {
+      window.alert(`Call failed: ${err.message}`);
+    } finally {
+      callBtn.disabled = false;
+      callBtn.textContent = original;
+    }
+    return;
+  }
+
   const runBtn = e.target.closest("[data-run]");
   if (runBtn) {
     e.stopPropagation();

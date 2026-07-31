@@ -17,14 +17,47 @@ implementation in server/agent/tools.py.
 
 import json
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from loguru import logger
 
+from .. import config
+from ..agent import tools as agent_tools
 from ..agent.tool_registry import TOOL_DEFS
 
 router = APIRouter()
 
 TOOLS_BY_NAME = {t["name"]: t for t in TOOL_DEFS}
+
+
+@router.post("/api/debts/{debt_id}/call")
+def call_borrower(debt_id: str):
+    """Place a real outbound call to this borrower's phone (the dashboard's
+    'Call borrower' button). Distinct from /run-agent, which runs the
+    deterministic simulator and never dials out."""
+    from ..vapi_setup import place_call
+
+    if not (config.VAPI_PRIVATE_KEY and config.VAPI_PHONE_NUMBER_ID and config.VAPI_ASSISTANT_ID):
+        raise HTTPException(503, "Vapi is not set up - run: python -m server.vapi_setup setup")
+
+    debt = agent_tools.get_debt_profile(debt_id)
+    if "error" in debt:
+        raise HTTPException(404, "not found")
+    if not debt.get("phone"):
+        raise HTTPException(400, f"{debt['name']} has no phone number on file")
+
+    try:
+        call = place_call(debt["phone"], debt_id)
+    except SystemExit as e:  # vapi_setup raises SystemExit on API errors
+        raise HTTPException(502, f"Vapi call failed: {e}")
+
+    logger.info(f"[outbound call] {debt['name']} {debt['phone']} -> vapi call {call.get('id')}")
+    return {
+        "debt_id": debt_id,
+        "name": debt["name"],
+        "to": debt["phone"],
+        "call_id": call.get("id"),
+        "status": call.get("status"),
+    }
 
 
 @router.post("/api/vapi/tools")
