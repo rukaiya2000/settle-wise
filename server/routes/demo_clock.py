@@ -37,7 +37,7 @@ def reset_demo_clock():
     """Full demo reset, not just the clock: advancing time mutates borrower
     state via the scheduler, so rewinding the clock alone leaves the next run
     starting from 'paid'/'needs_review' instead of the seeded state."""
-    from ..seed import reset_demo
+    from ..seed import reset_db
 
-    reset_demo()
+    reset_db()
     return demo_clock.get_demo_clock()
