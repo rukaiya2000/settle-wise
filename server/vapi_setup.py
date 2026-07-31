@@ -223,6 +223,7 @@ def place_call(to_number: str, debt_id: str | None = None) -> dict:
         payload["assistantOverrides"] = {
             "variableValues": {"debt_id": debt_id, "debt_context": _debt_context(debt_id)}
         }
+        payload["metadata"] = {"debt_id": debt_id}
     return _post("/call", payload)
 
 
