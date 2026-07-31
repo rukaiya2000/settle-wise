@@ -24,6 +24,33 @@ TOOL_DEFS = [
         "fn": agent_tools.get_memory,
     },
     {
+        "name": "verify_identity",
+        "description": (
+            "Verify you are speaking to the account holder by checking the last 4 digits of their "
+            "account reference. Call this BEFORE disclosing any balance, date, or account detail. "
+            "You do not know the correct digits and must never guess, hint at, or confirm them - "
+            "ask the borrower, pass exactly what they say to this tool, and act on the result."
+        ),
+        "properties": {
+            "debt_id": {"type": "string"},
+            "last4": {"type": "string", "description": "The 4 digits the borrower said, digits only."},
+        },
+        "required": ["debt_id", "last4"],
+        "fn": agent_tools.verify_identity,
+    },
+    {
+        "name": "get_payment_history",
+        "description": (
+            "What has actually been sent and paid on this account: every SMS payment link, its "
+            "status, and how much has been collected. Call this before responding to "
+            "\"I already paid\" or \"you never sent me anything\" - do not take either claim at "
+            "face value, and do not contradict the borrower without checking first."
+        ),
+        "properties": {"debt_id": {"type": "string"}},
+        "required": ["debt_id"],
+        "fn": agent_tools.get_payment_history,
+    },
+    {
         "name": "get_policy",
         "description": "Get the collections policy (max discount, min payment-today percent, max installments, allowed call hours).",
         "properties": {},

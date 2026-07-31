@@ -8,6 +8,11 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS debts (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    -- Account reference the borrower knows. Its last 4 digits are the shared
+    -- secret used to verify identity before any debt detail is disclosed, so
+    -- it is deliberately stripped from get_debt_profile - an agent that can
+    -- see the answer can leak it or be talked into confirming it.
+    account_ref TEXT,
     phone TEXT NOT NULL,
     amount_due REAL NOT NULL,
     amount_collected REAL NOT NULL DEFAULT 0,
@@ -88,10 +93,19 @@ CREATE TABLE IF NOT EXISTS policies (
 DEFAULT_POLICY_ID = "policy_default"
 
 
+def _migrate(conn):
+    """CREATE TABLE IF NOT EXISTS silently does nothing to a table that
+    already exists, so columns added later need backfilling explicitly."""
+    existing = {r[1] for r in conn.execute("PRAGMA table_info(debts)")}
+    if "account_ref" not in existing:
+        conn.execute("ALTER TABLE debts ADD COLUMN account_ref TEXT")
+
+
 def init_db():
     Path(config.DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(config.DB_PATH)
     conn.executescript(SCHEMA)
+    _migrate(conn)
     conn.execute(
         "INSERT OR IGNORE INTO demo_clock (id, current_time, timezone, speed) VALUES (1, ?, ?, 'paused')",
         (config.DEMO_CLOCK_START, config.DEMO_CLOCK_TIMEZONE),

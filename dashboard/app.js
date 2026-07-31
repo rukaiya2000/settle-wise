@@ -100,7 +100,16 @@ async function loadProgress(debtId) {
   ]);
 
   document.querySelector("#progName").textContent = detail.debt.name;
+  // Kept as the bare number - the call/SMS confirm dialogs read this.
   document.querySelector("#progPhone").textContent = detail.debt.phone;
+
+  // Staff-only. The agent never sees the reference (it verifies the last 4
+  // digits through a tool), but whoever is testing a call needs to know what
+  // to say when asked.
+  const ref = detail.debt.account_ref;
+  document.querySelector("#progRef").innerHTML = ref
+    ? `Account ref ${ref} &middot; last 4: <strong>${ref.replace(/\D/g, "").slice(-4)}</strong>`
+    : "";
 
   const cards = [
     { label: "Amount due", value: money(progress.amount_due) },

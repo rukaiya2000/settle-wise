@@ -349,3 +349,15 @@ button.ghost {
 @media (max-width: 760px) {
   .split { grid-template-columns: 1fr; }
 }
+
+/* Account reference - staff-only. Shown so whoever is testing a call knows
+   which digits to give when the agent asks; the agent itself never sees it. */
+.ref-hint {
+  font-size: 12px;
+  color: var(--subtle);
+  margin-top: 2px;
+}
+.ref-hint strong {
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}

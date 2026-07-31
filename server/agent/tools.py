@@ -32,7 +32,36 @@ def get_debt_profile(debt_id: str) -> dict:
     debt = row_to_dict(row)
     if debt is None:
         return {"error": f"No debt found for id {debt_id}"}
+    # The account reference is the identity-check secret. Never hand it to the
+    # agent: it only proves identity if the agent cannot see, hint at, or be
+    # persuaded to confirm the digits. verify_identity checks it server-side.
+    debt.pop("account_ref", None)
     return debt
+
+
+def verify_identity(debt_id: str, last4: str) -> dict:
+    """Check the last 4 digits of the borrower's account reference.
+
+    Compared server-side so the agent never handles the real value. Returns
+    only a boolean - no hint, no partial match, no "close" - so a failed
+    attempt leaks nothing about the correct answer.
+    """
+    with get_conn() as conn:
+        row = conn.execute("SELECT account_ref FROM debts WHERE id = ?", (debt_id,)).fetchone()
+    if row is None:
+        return {"error": f"No debt found for id {debt_id}"}
+
+    account_ref = (row["account_ref"] or "").strip()
+    if not account_ref:
+        # Nothing on file to check against - don't silently pass someone
+        # through, hand it to a human instead.
+        return {"verified": False, "reason": "no account reference on file for this borrower"}
+
+    supplied = "".join(ch for ch in str(last4) if ch.isdigit())
+    expected = "".join(ch for ch in account_ref if ch.isdigit())[-4:]
+
+    verified = bool(supplied) and supplied[-4:] == expected
+    return {"verified": verified, "reason": "" if verified else "digits do not match our records"}
 
 
 def get_memory(debt_id: str) -> dict:
@@ -401,3 +430,27 @@ def flag_borrower(debt_id: str, reason: str, severity: str = "warning") -> dict:
                 (f"Call ended early - {reason}", debt_id),
             )
     return {"debt_id": debt_id, "flagged": True, "severity": severity, "reason": reason}
+
+
+def get_payment_history(debt_id: str) -> dict:
+    """What has actually been sent and paid on this account.
+
+    Without this the agent can't answer the two most common pushbacks -
+    "I already paid" and "you never sent me anything" - and would have to
+    either guess or take the borrower's word for it.
+    """
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, payment_id, sent_at, type, amount, payment_status, payment_link "
+            "FROM sms_messages WHERE debt_id = ? ORDER BY sent_at",
+            (debt_id,),
+        ).fetchall()
+    debt = get_debt_profile(debt_id)
+    if "error" in debt:
+        return debt
+    return {
+        "amount_due": debt["amount_due"],
+        "amount_collected": debt["amount_collected"],
+        "outstanding": round(debt["amount_due"] - debt["amount_collected"], 2),
+        "messages": [dict(r) for r in rows],
+    }
