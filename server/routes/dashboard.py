@@ -5,6 +5,8 @@ from fastapi import APIRouter, HTTPException
 from ..agent import tools as agent_tools
 from ..agent.simulated_call import run_simulated_call
 from ..db import get_conn
+from ..seed import reset_db
+from ..vapi_setup import place_call
 
 router = APIRouter()
 
@@ -14,6 +16,12 @@ def list_debts():
     with get_conn() as conn:
         rows = conn.execute("SELECT * FROM debts ORDER BY breach_date").fetchall()
     return [dict(r) for r in rows]
+
+
+@router.post("/api/reset-demo")
+def reset_demo():
+    reset_db()
+    return {"status": "reset"}
 
 
 @router.get("/api/debts/{debt_id}")
@@ -107,6 +115,20 @@ def run_agent(debt_id: str, force: bool = False):
         raise HTTPException(400, "needs_review - pass force=true to override")
     result = run_simulated_call(debt_id)
     return {"debt_id": debt_id, "result": result}
+
+
+@router.post("/api/debts/{debt_id}/call-agent")
+def call_agent(debt_id: str):
+    """Place a real outbound phone call through Vapi's a1mobile SIP trunk."""
+    debt = agent_tools.get_debt_profile(debt_id)
+    if "error" in debt:
+        raise HTTPException(404, "not found")
+    if debt["status"] == "paid":
+        raise HTTPException(400, "already paid")
+    if debt["status"] == "needs_review":
+        raise HTTPException(400, "needs_review")
+    result = place_call(debt["phone"], debt_id)
+    return {"debt_id": debt_id, "phone": debt["phone"], "result": result}
 
 
 @router.post("/api/debts/{debt_id}/simulate-no-answer")
