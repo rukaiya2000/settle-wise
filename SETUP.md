@@ -61,25 +61,49 @@ the seed data's fake numbers.
 .venv/bin/python -m server.a1mobile_client verify "+1YOURNUMBER"
 # check the SMS you receive for the code
 .venv/bin/python -m server.a1mobile_client confirm "+1YOURNUMBER" "123456"
+# optional: confirm the SMS side works too
+.venv/bin/python -m server.a1mobile_client sms "+1YOURNUMBER" "hello from settlewise"
 ```
 
-Then call `+14108011742` (the claimed a1mobile number) from that phone.
+Then call the claimed a1mobile number (`A1MOBILE_PHONE_NUMBER` in `.env`) from
+that phone. If `/api/numbers/point` ever 409s with "claim a number first",
+the claim expired - re-run `.venv/bin/python -m server.a1mobile_client claim`,
+update `A1MOBILE_PHONE_NUMBER` in `.env`, and point the webhook again.
 
 ## How the voice call is wired
 
 `server/routes/voice.py` exposes:
 
 - `POST /voice` - a1mobile's webhook target. Responds with TeXML pointing a
-  `<Stream>` at `wss://.../ws` (mirrors Telnyx's Media Streaming handshake,
-  since a1mobile's SIP host is `sip.telnyx.com`).
-- `WS /ws` - the actual audio stream. Pipecat's `create_transport()` auto-detects
-  the provider from the handshake and builds the right frame serializer, so
-  this isn't hard-locked to Telnyx's exact wire format.
+  `<Stream>` at `wss://.../ws`.
+- `WS /ws` - the actual audio stream. Pipecat's `parse_telephony_websocket()`
+  auto-detects the provider from the handshake, so this isn't hard-locked to
+  Telnyx's exact wire format even though that's what a1mobile turned out to be.
 
-**This hasn't been confirmed against a1mobile's own docs** (only their curl
-examples were available) - watch the server logs on your first real test
-call. If the handshake doesn't match what's expected, `voice_webhook` logs
-the raw payload so the TeXML response or `/ws` parsing can be adjusted.
+**Confirmed against a real live call** (2026-07-31): a1mobile's handshake is
+Telnyx Media Streaming-shaped, exactly as guessed from their SIP host
+(`sip.telnyx.com`) - `parse_telephony_websocket` auto-detects it as `telnyx`
+from the second WebSocket message with no changes needed.
+
+One fix was required to get audio flowing at all: Pipecat's `create_transport()`
+convenience path builds a `TelnyxFrameSerializer` with `auto_hang_up=True` by
+default, which requires a real Telnyx `api_key`/`call_control_id` to hang up
+via Telnyx's REST API on call end. We don't have Telnyx credentials - a1mobile
+owns the underlying Telnyx call and tears it down itself - so that serializer
+construction raised `ValueError`/`TypeError` before any audio flowed (call
+would connect and go silent). `server/agent/pipeline.py`'s `run_bot()` now
+builds the transport manually via `parse_telephony_websocket()` +
+`TelnyxFrameSerializer(params=TelnyxFrameSerializer.InputParams(auto_hang_up=False))`
+instead of delegating to `create_transport()` for the `telnyx` case.
+
+With that fix, a full multi-turn conversation ran cleanly end to end (clean
+logs, no errors, TTFB 0.2-1s per turn). Audio was choppy on that first real
+call - no errors in the logs, so this reads as network jitter in the local
+dev machine -> free ngrok tunnel -> a1mobile -> Telnyx -> PSTN chain rather
+than a code bug. Worth trying if it recurs: a wired connection instead of
+Wi-Fi, checking for other bandwidth-heavy apps/CPU load, a paid ngrok tier,
+or eventually a real (non-tunnel) deployment near where a1mobile/Telnyx route
+from.
 
 The conversation itself (`server/agent/pipeline.py`) runs on OpenAI's
 realtime speech-to-speech model (`OPENAI_REALTIME_MODEL`, direct API key -

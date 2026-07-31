@@ -28,9 +28,10 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMUserAggregatorParams,
 )
 from pipecat.runner.types import WebSocketRunnerArguments
-from pipecat.runner.utils import create_transport
+from pipecat.runner.utils import create_transport, parse_telephony_websocket
+from pipecat.serializers.telnyx import TelnyxFrameSerializer
 from pipecat.services.openai.realtime.llm import OpenAIRealtimeLLMService
-from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
+from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
 from pipecat.workers.runner import WorkerRunner
 
 from .. import config
@@ -194,18 +195,51 @@ def _build_tools_schema() -> ToolsSchema:
 
 
 async def run_bot(runner_args: WebSocketRunnerArguments) -> None:
-    transport_params = {
-        "telnyx": lambda: FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True),
-        "twilio": lambda: FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True),
-        "plivo": lambda: FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True),
-        "exotel": lambda: FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True),
-    }
-    transport = await create_transport(runner_args, transport_params)
+    # create_transport()'s telnyx convenience path builds a TelnyxFrameSerializer
+    # with auto_hang_up=True by default, which requires a real Telnyx api_key/
+    # call_control_id to hang up via Telnyx's REST API on call end. We don't
+    # have Telnyx credentials - a1mobile owns the underlying Telnyx call and
+    # tears it down itself - so that serializer construction raises ValueError
+    # before any audio flows (confirmed live: call connects, then dead silence).
+    # Build the transport manually instead, with auto_hang_up disabled.
+    transport_type, call_data = await parse_telephony_websocket(runner_args.websocket)
 
-    call_data = getattr(runner_args, "call_data", None)
-    caller_phone = getattr(call_data, "from_number", None) if call_data else None
+    if transport_type == "telnyx":
+        serializer = TelnyxFrameSerializer(
+            stream_id=call_data["stream_id"],
+            call_control_id=call_data["call_id"],
+            outbound_encoding=call_data["outbound_encoding"],
+            inbound_encoding="PCMU",
+            params=TelnyxFrameSerializer.InputParams(auto_hang_up=False),
+        )
+    else:
+        # Other providers' serializers don't hard-validate at construction
+        # time the way Telnyx's does, so create_transport's normal path is
+        # safe to reuse here.
+        runner_args.transport_type = transport_type
+        runner_args.call_data = call_data
+        transport_params = {
+            "twilio": lambda: FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True),
+            "plivo": lambda: FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True),
+            "exotel": lambda: FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True),
+        }
+        transport = await create_transport(runner_args, transport_params)
+        caller_phone = getattr(call_data, "from_number", None)
+        debt_id = _find_debt_id_by_phone(caller_phone)
+        return await _run_pipeline(transport, debt_id)
+
+    transport = FastAPIWebsocketTransport(
+        websocket=runner_args.websocket,
+        params=FastAPIWebsocketParams(
+            audio_in_enabled=True, audio_out_enabled=True, add_wav_header=False, serializer=serializer
+        ),
+    )
+    caller_phone = getattr(call_data, "from_number", None)
     debt_id = _find_debt_id_by_phone(caller_phone)
+    return await _run_pipeline(transport, debt_id)
 
+
+async def _run_pipeline(transport, debt_id: str | None) -> None:
     # Realtime service handles STT, LLM, and TTS internally over one
     # WebSocket to OpenAI - no separate STT/TTS services needed.
     llm = OpenAIRealtimeLLMService(
