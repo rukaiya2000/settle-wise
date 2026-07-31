@@ -433,3 +433,59 @@ button.ghost {
   color: var(--text);
   letter-spacing: 0.5px;
 }
+
+/* --- Collapsible call details --- */
+
+.call-details {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+/* Styled as an obvious control, not a heading. The first version used the
+   same small grey uppercase treatment as the section titles around it, so it
+   read as a label and nobody realised it could be clicked. */
+.call-details summary {
+  cursor: pointer;
+  margin-top: 12px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--blue);
+  background: var(--blue-bg);
+  border: 1px solid #cfe0f7;
+  border-radius: 999px;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+
+.call-details summary:hover {
+  background: #dbe8fb;
+}
+
+/* Replace the default marker with one that rotates, so the control reads the
+   same in every browser. */
+.call-details summary::-webkit-details-marker { display: none; }
+
+.call-details summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
+}
+
+.call-details[open] summary::before { transform: rotate(90deg); }
+
+/* Spell out the action rather than relying on the caret alone. */
+.call-details summary::after { content: "Show"; opacity: 0.7; }
+.call-details[open] summary::after { content: "Hide"; }
+
+.call-details .split { padding-top: 14px; }
+
+/* Nothing to show in the actions column - let the transcript use the space. */
+.split.single { grid-template-columns: 1fr; }

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SettleWise</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=2" />
 </head>
 <body>
   <header class="topbar">
@@ -68,16 +68,22 @@
         </div>
         <div id="lastCallSummary" class="call-summary"></div>
 
-        <div class="split">
-          <div>
-            <h4>What the agent did</h4>
-            <ol id="agentSteps" class="steps"></ol>
+        <!-- Native <details> so it's keyboard accessible and keeps its open
+             state across the re-render that runs on window focus. -->
+        <details id="lastCallDetails" class="call-details">
+          <summary><span id="lastCallToggle">Call details</span></summary>
+
+          <div class="split" id="lastCallSplit">
+            <div id="agentStepsWrap">
+              <h4>What the agent did</h4>
+              <ol id="agentSteps" class="steps"></ol>
+            </div>
+            <div id="transcriptWrap">
+              <h4>Transcript</h4>
+              <div id="lastCallTranscript" class="transcript"></div>
+            </div>
           </div>
-          <div>
-            <h4>Transcript</h4>
-            <div id="lastCallTranscript" class="transcript"></div>
-          </div>
-        </div>
+        </details>
       </section>
 
       <div class="columns">
@@ -97,6 +103,6 @@
     </section>
   </main>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=2"></script>
 </body>
 </html>

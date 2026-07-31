@@ -324,10 +324,9 @@ function renderLastCall(detail) {
   document.querySelector("#lastCallSummary").textContent = last && last.summary ? last.summary : "";
 
   const transcriptEl = document.querySelector("#lastCallTranscript");
-  if (last && last.transcript) {
-    transcriptEl.innerHTML = last.transcript
-      .split("\n")
-      .filter((line) => line.trim())
+  const turns = last && last.transcript ? last.transcript.split("\n").filter((l) => l.trim()) : [];
+  if (turns.length) {
+    transcriptEl.innerHTML = turns
       .map((line) => {
         const isAgent = /^(AI|Agent)\s*:/i.test(line);
         const text = line.replace(/^(AI|Agent|User|Borrower)\s*:\s*/i, "");
@@ -356,6 +355,22 @@ function renderLastCall(detail) {
         })
         .join("")
     : '<div class="feed-empty">No recorded agent actions yet.</div>';
+
+  // An empty "what the agent did" column left half the panel blank, which
+  // read as broken rather than empty. Give the transcript the full width
+  // instead and drop the column entirely.
+  const hasActions = actions.length > 0;
+  document.querySelector("#agentStepsWrap").classList.toggle("hidden", !hasActions);
+  document.querySelector("#lastCallSplit").classList.toggle("single", !hasActions);
+
+  // Say what's inside while it's shut, so collapsing doesn't hide whether
+  // there is anything worth opening.
+  const parts = [];
+  if (hasActions) parts.push(`${actions.length} action${actions.length === 1 ? "" : "s"}`);
+  if (turns.length) parts.push(`${turns.length} turn${turns.length === 1 ? "" : "s"}`);
+  document.querySelector("#lastCallToggle").textContent = parts.length
+    ? `Call details — ${parts.join(" · ")}`
+    : "Call details";
 }
 
 function setCallStatus(state, text) {
