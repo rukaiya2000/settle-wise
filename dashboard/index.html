@@ -10,37 +10,23 @@
   <header class="topbar">
     <div class="brand">SettleWise</div>
     <div class="clock">
-      <span class="clock-label">Demo time</span>
+      <span class="clock-label">Demo clock</span>
       <span id="clockValue">--</span>
-      <button data-advance="1" data-unit="hour">+1 hour</button>
       <button data-advance="1" data-unit="day">+1 day</button>
-      <button data-advance="3" data-unit="day">+3 days</button>
       <button id="resetClock" class="ghost">Reset</button>
     </div>
   </header>
 
   <main id="app">
     <section id="profilesView">
-      <div class="metrics-row" id="metricsRow"></div>
-
-      <div class="toolbar">
-        <div class="filters" id="filters">
-          <button data-filter="all" class="active">All</button>
-          <button data-filter="needs_call">Needs call</button>
-          <button data-filter="promised">Promised</button>
-          <button data-filter="paid">Paid</button>
-          <button data-filter="needs_review">Needs review</button>
-        </div>
-      </div>
-
       <table class="debt-table">
         <thead>
           <tr>
-            <th>Borrower</th>
-            <th>Due</th>
+            <th>Personal name</th>
+            <th>Phone number</th>
             <th>Amount due</th>
+            <th>Due date</th>
             <th>Status</th>
-            <th>Next action</th>
             <th></th>
           </tr>
         </thead>
@@ -49,19 +35,14 @@
     </section>
 
     <section id="progressView" class="hidden">
-      <button id="backButton" class="ghost">&larr; All profiles</button>
+      <button id="backButton" class="ghost">&larr; All borrowers</button>
 
       <div class="progress-header">
         <div>
           <h1 id="progName"></h1>
           <div class="subtle" id="progPhone"></div>
         </div>
-        <div class="progress-actions">
-          <button id="runAgentButton">Run agent</button>
-        </div>
       </div>
-
-      <div id="runResult" class="run-result hidden"></div>
 
       <div class="metrics-row" id="progMetrics"></div>
 
