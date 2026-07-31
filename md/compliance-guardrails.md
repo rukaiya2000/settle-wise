@@ -44,7 +44,7 @@ Every conversation should show:
 
 ## Nice-to-Have Dashboard
 
-- Accounts contacted.
+- Debt profiles contacted.
 - Promises to pay.
 - Payments collected.
 - Discounts given.

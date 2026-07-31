@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SettleWise Demo Dashboard</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">SettleWise</p>
+          <h1>Voice collection dashboard</h1>
+        </div>
+        <div class="top-actions" aria-label="Dashboard controls">
+          <div class="segmented" role="group" aria-label="Time horizon">
+            <button class="segment active" data-horizon="7">7d</button>
+            <button class="segment" data-horizon="14">14d</button>
+            <button class="segment" data-horizon="30">30d</button>
+          </div>
+          <button class="primary-action" id="runAgentButton">Run next calls</button>
+        </div>
+      </header>
+
+      <section class="hero-grid" aria-label="Collection progress overview">
+        <div class="metric-panel dark-panel">
+          <div class="metric-label">Expected recovered</div>
+          <div class="metric-value" id="expectedRecovered">$0</div>
+          <div class="metric-subline" id="expectedRecoveredSubline">Across selected horizon</div>
+          <div class="recovery-meter" aria-hidden="true">
+            <span id="recoveryMeter"></span>
+          </div>
+        </div>
+
+        <div class="metric-panel">
+          <div class="metric-label">Voice calls queued</div>
+          <div class="metric-value" id="callsQueued">0</div>
+          <div class="metric-subline">Agent priority queue</div>
+        </div>
+
+        <div class="metric-panel">
+          <div class="metric-label">SMS links sent</div>
+          <div class="metric-value" id="linksSent">0</div>
+          <div class="metric-subline">Payment links + reminders</div>
+        </div>
+
+        <div class="metric-panel">
+          <div class="metric-label">At breach risk</div>
+          <div class="metric-value risk" id="riskCount">0</div>
+          <div class="metric-subline">Needs call today</div>
+        </div>
+      </section>
+
+      <section class="main-grid">
+        <div class="chart-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Collection progress over time</h2>
+              <p>Projected recovery from voice calls and SMS payment links.</p>
+            </div>
+            <div class="chart-legend">
+              <span><i class="dot collected"></i>Collected</span>
+              <span><i class="dot promised"></i>Promised</span>
+              <span><i class="dot risk"></i>Risk</span>
+            </div>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="progressChart" width="920" height="360" aria-label="Collection progress chart"></canvas>
+          </div>
+        </div>
+
+        <aside class="agent-panel" aria-label="Agent run status">
+          <div class="panel-heading compact">
+            <div>
+              <h2>Agent run</h2>
+              <p id="agentRunCopy">Ready to call the next borrowers.</p>
+            </div>
+          </div>
+          <div class="run-stack" id="runStack"></div>
+        </aside>
+      </section>
+
+      <section class="lower-grid">
+        <div class="queue-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Debt queue</h2>
+              <p>Sorted by breach risk and collection opportunity.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Borrower</th>
+                  <th>Due</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Next action</th>
+                </tr>
+              </thead>
+              <tbody id="debtTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="side-stack">
+          <section class="timeline-panel">
+            <div class="panel-heading compact">
+              <div>
+                <h2>SMS timeline</h2>
+                <p>Only links, reminders, and confirmations.</p>
+              </div>
+            </div>
+            <div class="timeline" id="smsTimeline"></div>
+          </section>
+
+          <section class="memory-panel">
+            <div class="panel-heading compact">
+              <div>
+                <h2>Memory learned</h2>
+                <p>Facts the next call can use.</p>
+              </div>
+            </div>
+            <div class="memory-list" id="memoryList"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>

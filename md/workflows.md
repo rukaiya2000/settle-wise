@@ -7,7 +7,7 @@
 3. Validate required fields.
 4. Resolve duplicates.
 5. Set initial status to `new`.
-6. Set `next_action` to `Call borrower`.
+6. Set `next_action` to `call_borrower`.
 
 ## Outreach Scheduling
 
@@ -37,7 +37,7 @@
 3. Agent confirms details in writing.
 4. Scheduler creates reminder before promise date.
 5. System monitors payment completion.
-6. If payment is missed, debt returns to prioritization.
+6. If payment is missed, set status to `missed` and schedule `call_borrower`.
 
 ## Dispute Handling
 
@@ -61,7 +61,7 @@
 
 1. Payment provider sends callback.
 2. Match payment to SMS payment link and debt.
-3. Update debt amount/status.
+3. Update `amount_collected`, `amount_promised`, and status.
 4. Send confirmation.
 5. Cancel unnecessary follow-ups.
 6. Write conversation event.
