@@ -161,6 +161,18 @@ button.ghost {
 
 #backButton { margin-top: 8px; }
 
+.call-status {
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.call-status.connecting { background: var(--amber-bg); color: var(--amber); }
+.call-status.connected { background: var(--green-bg); color: var(--green); }
+.call-status.error { background: var(--red-bg); color: var(--red); }
+
 .progress-bar-wrap { margin-bottom: 24px; }
 
 .progress-bar {

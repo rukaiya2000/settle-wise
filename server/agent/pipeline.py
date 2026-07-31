@@ -115,6 +115,25 @@ async def run_bot(runner_args: WebSocketRunnerArguments) -> None:
     return await _run_pipeline(transport, debt_id)
 
 
+async def run_bot_webrtc(webrtc_connection, debt_id: str | None) -> None:
+    """Browser-call entry point (server/routes/browser_call.py's /api/offer).
+
+    a1mobile has no outbound-calling capability at all (confirmed by querying
+    its MCP tool catalog directly: claim_number, point_number, send SMS,
+    verify - no dial/call tool exists). This is the substitute for "the
+    agent calls me": a live mic/speaker session straight from the browser to
+    the same realtime agent, no phone number involved.
+    """
+    from pipecat.transports.base_transport import TransportParams
+    from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
+
+    transport = SmallWebRTCTransport(
+        webrtc_connection=webrtc_connection,
+        params=TransportParams(audio_in_enabled=True, audio_out_enabled=True),
+    )
+    await _run_pipeline(transport, debt_id)
+
+
 async def _run_pipeline(transport, debt_id: str | None) -> None:
     # Realtime service handles STT, LLM, and TTS internally over one
     # WebSocket to OpenAI - no separate STT/TTS services needed.

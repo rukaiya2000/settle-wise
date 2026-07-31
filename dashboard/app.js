@@ -139,13 +139,120 @@ function showRunResult(result) {
   window.alert(`Agent result: ${JSON.stringify(result)}`);
 }
 
+// a1mobile has no outbound-calling capability (confirmed via its MCP tool
+// catalog - no dial/call tool exists), so this is the substitute: a live
+// mic/speaker session straight to the same realtime agent via WebRTC.
+let activeCall = null; // { pc, audioEl, stream }
+
+function setCallStatus(state, text) {
+  const el = document.querySelector("#callStatus");
+  el.classList.remove("hidden", "connecting", "connected", "error");
+  if (state) el.classList.add(state);
+  el.textContent = text || "";
+}
+
+async function startBrowserCall(debtId) {
+  const button = document.querySelector("#callAgentButton");
+  button.disabled = true;
+  setCallStatus("connecting", "Requesting microphone access...");
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const pc = new RTCPeerConnection();
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+    const audioEl = document.createElement("audio");
+    audioEl.autoplay = true;
+    pc.ontrack = (event) => {
+      audioEl.srcObject = event.streams[0];
+    };
+    document.body.appendChild(audioEl);
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "connected") {
+        setCallStatus("connected", "Connected - talking to agent");
+      } else if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
+        endBrowserCall();
+      }
+    };
+
+    setCallStatus("connecting", "Connecting to agent...");
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    await new Promise((resolve) => {
+      if (pc.iceGatheringState === "complete") return resolve();
+      const check = () => {
+        if (pc.iceGatheringState === "complete") {
+          pc.removeEventListener("icegatheringstatechange", check);
+          resolve();
+        }
+      };
+      pc.addEventListener("icegatheringstatechange", check);
+    });
+
+    const res = await fetch("/api/offer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sdp: pc.localDescription.sdp,
+        type: pc.localDescription.type,
+        request_data: { debt_id: debtId },
+      }),
+    });
+    if (!res.ok) throw new Error(`offer failed: ${res.status}`);
+    const answer = await res.json();
+    await pc.setRemoteDescription({ sdp: answer.sdp, type: answer.type });
+
+    activeCall = { pc, audioEl, stream };
+    button.textContent = "Hang up";
+    button.disabled = false;
+  } catch (err) {
+    setCallStatus("error", `Call failed: ${err.message}`);
+    button.disabled = false;
+    endBrowserCall();
+  }
+}
+
+function endBrowserCall() {
+  if (activeCall) {
+    activeCall.pc.close();
+    activeCall.stream.getTracks().forEach((t) => t.stop());
+    activeCall.audioEl.remove();
+    activeCall = null;
+  }
+  const button = document.querySelector("#callAgentButton");
+  if (button) {
+    button.textContent = "Call agent (browser)";
+    button.disabled = false;
+  }
+  setCallStatus(null, "");
+  document.querySelector("#callStatus").classList.add("hidden");
+}
+
+document.querySelector("#callAgentButton").addEventListener("click", () => {
+  if (activeCall) {
+    endBrowserCall();
+  } else {
+    const debtId = window.location.hash.replace(/^#\/?/, "");
+    startBrowserCall(debtId);
+  }
+});
+
 function setView(view) {
   document.querySelector("#profilesView").classList.toggle("hidden", view !== "profiles");
   document.querySelector("#progressView").classList.toggle("hidden", view !== "progress");
 }
 
+let lastRoutedHash = null;
+
 async function route() {
   const hash = window.location.hash.replace(/^#\/?/, "");
+  // Only hang up on an actual navigation (hash changed) - route() also runs
+  // on window focus (to refresh data after paying in another tab), which
+  // must not drop an active call just from switching tabs.
+  if (hash !== lastRoutedHash) endBrowserCall();
+  lastRoutedHash = hash;
   if (hash) {
     setView("progress");
     await loadProgress(hash);
