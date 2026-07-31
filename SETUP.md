@@ -94,10 +94,42 @@ and instructs the model to never state numbers from its own reasoning.
 
 The dashboard/payment API works standalone against the seeded data:
 
-- `GET /api/debts`, `GET /api/debts/{id}` - borrower state, call/SMS/memory history
-- `GET /pay/{payment_id}` + `POST /pay/{payment_id}/complete` - mock checkout,
-  matches `md/system-architecture.md`'s fake `/pay/:paymentId` flow
+- `GET /api/debts`, `GET /api/debts/{id}`, `GET /api/debts/{id}/progress` -
+  borrower state, key metrics, call/SMS/memory history
+- `POST /api/debts/{id}/run-agent` - manually trigger the deterministic
+  simulated call engine (`server/agent/simulated_call.py`) for one debt
+- `GET /pay/{payment_id}` + `POST /pay/{payment_id}/complete` (also exposed
+  as `POST /api/payments/{payment_id}/mark-paid`) - mock checkout, matches
+  `md/system-architecture.md`'s fake `/pay/:paymentId` flow
 
-`server/agent/tools.py`'s `create_payment_link` only sends a real SMS through
-a1mobile when `A1MOBILE_LIVE_SMS=true` in `.env`; otherwise it just logs the
-`sms_messages` row, keeping the default loop simulated per the MVP scope.
+`server/agent/tools.py`'s `send_sms_payment_link` only sends a real SMS
+through a1mobile when `A1MOBILE_LIVE_SMS=true` in `.env`; otherwise it just
+logs the `sms_messages` row, keeping the default loop simulated per the MVP
+scope.
+
+## Demo clock (30 days in seconds)
+
+Per `md/technical-spec.md`, all scheduling reads a fake, controllable clock
+instead of real time, so a week+ of collections activity can be replayed in
+one request:
+
+```bash
+curl http://127.0.0.1:8787/api/demo-clock
+curl -X POST http://127.0.0.1:8787/api/demo-clock/advance \
+  -H "Content-Type: application/json" -d '{"amount": 7, "unit": "day"}'
+curl -X POST http://127.0.0.1:8787/api/demo-clock/reset
+```
+
+Advancing fires every debt's due `next_action` in chronological order
+(`server/scheduler.py`) via the deterministic simulator - calls, SMS
+reminders, payment links, and follow-ups all chain together the same way a
+real week of agent activity would, without placing real calls. Outcomes are
+seeded off `debt_id` + attempt number, so a given demo replay is
+reproducible, not actually random. The live a1mobile/realtime voice call
+(`/voice`, `/ws`) is a separate, explicit path for the one moment you want to
+show a real phone call - `run-agent` and the clock never trigger it.
+
+Policy limits (max discount, min payment-today %, installment cap, call
+window, attempts/day) live in the `policies` table (`server/policy.py`),
+seeded with a `policy_default` row on first `init_db()` - edit
+`MAX_DISCOUNT_PCT` etc. in `.env` or the row directly to tune the demo.

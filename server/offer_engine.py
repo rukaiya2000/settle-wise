@@ -1,58 +1,58 @@
-"""Deterministic offer ladder per md/mvp-scope.md.
+"""Deterministic offer generation per md/technical-spec.md "Agent Tool Surface".
 
-Priority order: full payment -> partial payment -> installment plan
-(only if a future income date is known) -> discount/settlement (capped) ->
-human review. The agent must not invent offers outside this ladder
-(md/agent-behavior.md negotiation rules).
+Policy-driven: max discount, min payment-today percent, and installment cap
+come from the synthetic policy (server/policy.py) rather than being
+hardcoded, so tuning the demo happens in one place. The agent must not
+invent an offer outside what this returns (md/agent-behavior.md negotiation
+rules).
 """
 
-from dataclasses import dataclass
 
-from . import config
+def generate_offer_options(
+    amount_due: float,
+    amount_collected: float,
+    policy: dict,
+    borrower_can_pay_today: float | None = None,
+    has_future_income_date: bool = False,
+) -> list[dict]:
+    remaining = round(amount_due - amount_collected, 2)
+    offers = [{"type": "pay_today", "amount": remaining}]
 
-
-@dataclass
-class Offer:
-    kind: str
-    label: str
-    amount: float
-    conditions: str
-
-
-def build_offer_ladder(amount_due: float, has_future_income_date: bool) -> list[Offer]:
-    ladder = [
-        Offer("full_payment", "Full payment today", amount_due, "Default first ask"),
-        Offer(
-            "partial_payment",
-            "Partial payment today plus remainder before breach",
-            amount_due,
-            "Borrower cannot pay full today",
-        ),
-    ]
-    if has_future_income_date:
-        ladder.append(
-            Offer(
-                "installment_plan",
-                "Installment plan",
-                amount_due,
-                "Debt is eligible and borrower has a future income date",
-            )
+    if borrower_can_pay_today is not None and borrower_can_pay_today < remaining:
+        min_today = round(remaining * (policy["min_payment_today_percent"] / 100), 2)
+        amount_today = max(borrower_can_pay_today, 0)
+        amount_today = max(amount_today, min_today) if amount_today > 0 else min_today
+        amount_today = min(amount_today, remaining)
+        offers.append(
+            {
+                "type": "partial",
+                "amount_today": amount_today,
+                "remaining": round(remaining - amount_today, 2),
+            }
         )
-    max_discount = round(amount_due * (config.MAX_DISCOUNT_PCT / 100), 2)
-    ladder.append(
-        Offer(
-            "discount_settlement",
-            f"Discount or settlement (max {config.MAX_DISCOUNT_PCT:.0f}%)",
-            round(amount_due - max_discount, 2),
-            f"Simple rule: max {config.MAX_DISCOUNT_PCT:.0f}% discount",
-        )
+
+    if has_future_income_date and policy["max_installments"] > 1:
+        n = int(policy["max_installments"])
+        base = round(remaining / n, 2)
+        installments = [base] * (n - 1)
+        installments.append(round(remaining - base * (n - 1), 2))
+        offers.append({"type": "installment", "installments": installments})
+
+    max_discount_amount = round(remaining * (policy["max_discount_percent"] / 100), 2)
+    offers.append(
+        {
+            "type": "discount_settlement",
+            "amount": round(remaining - max_discount_amount, 2),
+            "max_discount_percent": policy["max_discount_percent"],
+        }
     )
-    return ladder
+
+    return offers
 
 
-def apply_discount(amount_due: float, requested_pct: float) -> float | None:
+def apply_discount(remaining: float, requested_pct: float, policy: dict) -> float | None:
     """Returns the settled amount, or None if the request exceeds policy
-    and must go to human review (md/mvp-scope.md offer ladder, priority 5)."""
-    if requested_pct > config.MAX_DISCOUNT_PCT:
+    and must go to human review."""
+    if requested_pct > policy["max_discount_percent"]:
         return None
-    return round(amount_due * (1 - requested_pct / 100), 2)
+    return round(remaining * (1 - requested_pct / 100), 2)

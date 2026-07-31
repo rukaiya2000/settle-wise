@@ -5,39 +5,90 @@
       "name": "Riya Sharma",
       "phone": "+14155550123",
       "amount_due": 850,
+      "amount_collected": 0,
+      "amount_promised": 0,
       "due_date": "2026-08-05",
       "breach_date": "2026-08-10",
       "status": "new",
       "salary_date": "5th of every month",
       "last_call_summary": "",
-      "next_action_at": null,
-      "next_action": "Call borrower"
+      "next_action_at": "2026-08-01T09:00:00",
+      "next_action": "call_borrower"
     },
     {
       "id": "debt_002",
       "name": "Marcus Webb",
       "phone": "+14155550188",
       "amount_due": 420,
+      "amount_collected": 0,
+      "amount_promised": 420,
       "due_date": "2026-08-02",
       "breach_date": "2026-08-06",
       "status": "promised",
       "salary_date": "1st of every month",
       "last_call_summary": "Agreed to pay 200 today, remainder 220 on the 1st after salary.",
-      "next_action_at": "2026-08-01T10:00:00",
-      "next_action": "Send SMS reminder"
+      "next_action_at": "2026-08-02T09:00:00",
+      "next_action": "send_sms_reminder"
     },
     {
       "id": "debt_003",
       "name": "Elena Torres",
       "phone": "+14155550199",
       "amount_due": 1200,
+      "amount_collected": 0,
+      "amount_promised": 0,
       "due_date": "2026-08-08",
       "breach_date": "2026-08-12",
       "status": "needs_review",
       "salary_date": "",
       "last_call_summary": "Borrower disputes the amount, says only 900 was borrowed.",
       "next_action_at": null,
-      "next_action": "Human review"
+      "next_action": "human_review"
+    },
+    {
+      "id": "debt_004",
+      "name": "Sam Okafor",
+      "phone": "+14155550211",
+      "amount_due": 500,
+      "amount_collected": 500,
+      "amount_promised": 0,
+      "due_date": "2026-07-30",
+      "breach_date": "2026-08-04",
+      "status": "paid",
+      "salary_date": "20th of every month",
+      "last_call_summary": "Paid in full same day via SMS link.",
+      "next_action_at": null,
+      "next_action": null
+    },
+    {
+      "id": "debt_005",
+      "name": "Jordan Ellis",
+      "phone": "+14155550233",
+      "amount_due": 640,
+      "amount_collected": 0,
+      "amount_promised": 0,
+      "due_date": "2026-08-09",
+      "breach_date": "2026-08-14",
+      "status": "scheduled",
+      "salary_date": "",
+      "last_call_summary": "No answer. Retry this afternoon.",
+      "next_action_at": "2026-08-01T13:00:00",
+      "next_action": "call_borrower"
+    },
+    {
+      "id": "debt_006",
+      "name": "Priya Menon",
+      "phone": "+14155550245",
+      "amount_due": 300,
+      "amount_collected": 0,
+      "amount_promised": 255,
+      "due_date": "2026-08-11",
+      "breach_date": "2026-08-16",
+      "status": "promised",
+      "salary_date": "",
+      "last_call_summary": "Asked for a discount. Approved 15% settlement of 255.",
+      "next_action_at": "2026-08-02T09:00:00",
+      "next_action": "send_sms_reminder"
     }
   ],
   "calls": [
@@ -48,8 +99,8 @@
       "outcome": "promised",
       "transcript": "Agent: Hi Marcus, this is a courtesy call about your outstanding balance of $420...\nBorrower: I can do 200 today, rest on the 1st.\nAgent: That works. I'll text you a link for the 200 now.",
       "summary": "Borrower agreed to pay 200 today, remainder 220 on the 1st.",
-      "amount_promised": 200,
-      "promise_date": "2026-07-28"
+      "amount_promised": 420,
+      "promise_date": "2026-08-01"
     },
     {
       "id": "call_002",
@@ -60,16 +111,81 @@
       "summary": "Borrower disputes the amount. Escalated to human review.",
       "amount_promised": null,
       "promise_date": null
+    },
+    {
+      "id": "call_003",
+      "debt_id": "debt_004",
+      "started_at": "2026-07-29T11:15:00",
+      "outcome": "promised",
+      "transcript": "Agent: Hi Sam, this is about your balance of $500...\nBorrower: I can pay the whole thing right now.\nAgent: Great, I'll send the link.",
+      "summary": "Borrower agreed to pay the full $500 today.",
+      "amount_promised": 500,
+      "promise_date": "2026-07-29"
+    },
+    {
+      "id": "call_004",
+      "debt_id": "debt_005",
+      "started_at": "2026-07-31T09:10:00",
+      "outcome": "no_answer",
+      "transcript": "",
+      "summary": "No answer.",
+      "amount_promised": null,
+      "promise_date": null
+    },
+    {
+      "id": "call_005",
+      "debt_id": "debt_006",
+      "started_at": "2026-07-30T16:40:00",
+      "outcome": "promised",
+      "transcript": "Agent: Hi Priya, this is about your balance of $300...\nBorrower: Can I get a discount, I can't pay all of it.\nAgent: I can approve up to 15% off - that brings it to $255.\nBorrower: Okay, I'll take that.",
+      "summary": "Asked for a discount. Approved 15% settlement of 255.",
+      "amount_promised": 255,
+      "promise_date": "2026-08-02"
     }
   ],
   "sms_messages": [
     {
       "id": "sms_001",
       "debt_id": "debt_002",
+      "payment_id": "pay_001",
       "sent_at": "2026-07-28T18:07:00",
       "type": "payment_link",
+      "amount": 200,
       "body": "Pay $200 here: /pay/pay_001",
       "payment_link": "/pay/pay_001",
+      "payment_status": "sent"
+    },
+    {
+      "id": "sms_002",
+      "debt_id": "debt_004",
+      "payment_id": "pay_002",
+      "sent_at": "2026-07-29T11:17:00",
+      "type": "payment_link",
+      "amount": 500,
+      "body": "Pay $500 here: /pay/pay_002",
+      "payment_link": "/pay/pay_002",
+      "payment_status": "paid"
+    },
+    {
+      "id": "sms_003",
+      "debt_id": "debt_004",
+      "payment_id": null,
+      "sent_at": "2026-07-29T11:22:00",
+      "type": "confirmation",
+      "amount": 500,
+      "body": "Payment received: $500. Thank you.",
+      "payment_link": null,
+      "payment_status": "paid"
+    },
+    {
+      "id": "sms_004",
+      "debt_id": "debt_006",
+      "payment_id": "pay_003",
+      "sent_at": "2026-07-30T16:42:00",
+      "type": "payment_link",
+      "amount": 255,
+      "body": "Pay $255 here: /pay/pay_003",
+      "payment_link": "/pay/pay_003",
       "payment_status": "sent"
     }
   ],
@@ -87,6 +203,18 @@
       "key": "dispute_signal",
       "value": "Says only 900 was borrowed, not 1200",
       "learned_at": "2026-07-27T14:21:00"
+    },
+    {
+      "id": "mem_003",
+      "debt_id": "debt_006",
+      "key": "discount_signal",
+      "value": "Asked for a discount, settled at 15% off",
+      "learned_at": "2026-07-30T16:41:00"
     }
-  ]
+  ],
+  "demo_clock": {
+    "current_time": "2026-08-01T09:00:00",
+    "timezone": "America/Los_Angeles",
+    "speed": "paused"
+  }
 }

@@ -31,3 +31,8 @@ DB_PATH = os.getenv("DB_PATH", str(BASE_DIR / "data" / "settlewise.db"))
 SEED_PATH = os.getenv("SEED_PATH", str(BASE_DIR / "data" / "seed.json"))
 
 MAX_DISCOUNT_PCT = float(os.getenv("MAX_DISCOUNT_PCT", "15"))
+
+# Demo clock (md/technical-spec.md) - fake controllable time so 30 days of
+# collections activity can be compressed into a short demo.
+DEMO_CLOCK_START = os.getenv("DEMO_CLOCK_START", "2026-08-01T09:00:00")
+DEMO_CLOCK_TIMEZONE = os.getenv("DEMO_CLOCK_TIMEZONE", "America/Los_Angeles")
