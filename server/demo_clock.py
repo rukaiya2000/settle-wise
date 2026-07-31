@@ -6,6 +6,7 @@ activity can be replayed in seconds by advancing this clock - each
 advance fires every scheduled action due before the new time, in order.
 """
 
+import json
 from datetime import datetime, timedelta
 
 from . import config
@@ -33,8 +34,21 @@ def set_demo_clock(current_time_iso: str) -> dict:
     return get_demo_clock()
 
 
+def seed_start_time() -> str:
+    """The demo's start time, taken from data/seed.json so a reset lands on
+    exactly the same clock a fresh seed produces. config.DEMO_CLOCK_START is
+    only the fallback for when the seed file has no demo_clock block - having
+    reset use it unconditionally meant Reset jumped to a different time than
+    seeding did."""
+    try:
+        with open(config.SEED_PATH) as f:
+            return json.load(f)["demo_clock"]["current_time"]
+    except (OSError, KeyError, json.JSONDecodeError):
+        return config.DEMO_CLOCK_START
+
+
 def reset_demo_clock() -> dict:
-    return set_demo_clock(config.DEMO_CLOCK_START)
+    return set_demo_clock(seed_start_time())
 
 
 def advance_demo_clock(amount: int, unit: str) -> dict:

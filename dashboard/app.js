@@ -18,15 +18,39 @@ async function api(path, options) {
   return res.status === 204 ? null : res.json();
 }
 
-function formatClock(iso) {
+// Every timestamp from the API (demo clock, calls, SMS, memory) is a naive
+// wall-clock string in the demo clock's timezone - see demo_clock.timezone,
+// America/Los_Angeles. new Date("2026-08-01T09:00:00") would parse that in the
+// *viewer's* timezone, so the same demo would read differently on different
+// machines. Render the stored digits verbatim instead: treat them as UTC and
+// format in UTC, which round-trips them unchanged.
+function formatClock(iso, withZone = false) {
   if (!iso) return "--";
-  const d = new Date(iso);
-  return d.toLocaleString("en-US", {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(iso);
+  if (!m) return iso;
+  const [, y, mo, d, hh, mm] = m;
+  const asUTC = new Date(Date.UTC(+y, +mo - 1, +d, +hh, +mm));
+
+  const text = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  });
+  }).format(asUTC);
+
+  return withZone ? `${text} ${zoneLabel(asUTC)}` : text;
+}
+
+// "PST" / "PDT" for the demo clock's timezone. Derived from the date so it
+// follows daylight saving rather than being hardcoded.
+function zoneLabel(date) {
+  const tz = (demoClock && demoClock.timezone) || "America/Los_Angeles";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    timeZoneName: "short",
+  }).formatToParts(date);
+  return (parts.find((p) => p.type === "timeZoneName") || {}).value || "";
 }
 
 async function loadDebts() {
@@ -36,7 +60,7 @@ async function loadDebts() {
 
 async function loadClock() {
   demoClock = await api("/api/demo-clock");
-  document.querySelector("#clockValue").textContent = formatClock(demoClock.current_time);
+  document.querySelector("#clockValue").textContent = formatClock(demoClock.current_time, true);
 }
 
 function renderTable() {

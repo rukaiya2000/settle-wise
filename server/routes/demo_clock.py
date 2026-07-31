@@ -34,4 +34,10 @@ def set_demo_clock(body: SetRequest):
 
 @router.post("/api/demo-clock/reset")
 def reset_demo_clock():
-    return demo_clock.reset_demo_clock()
+    """Full demo reset, not just the clock: advancing time mutates borrower
+    state via the scheduler, so rewinding the clock alone leaves the next run
+    starting from 'paid'/'needs_review' instead of the seeded state."""
+    from ..seed import reset_demo
+
+    reset_demo()
+    return demo_clock.get_demo_clock()

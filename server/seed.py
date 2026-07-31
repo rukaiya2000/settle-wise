@@ -1,4 +1,5 @@
 import json
+import sys
 
 from . import config
 from .db import get_conn, init_db
@@ -61,5 +62,20 @@ def seed():
     print(f"Seeded {config.DB_PATH} from {config.SEED_PATH}")
 
 
-if __name__ == "__main__":
+def reset_demo():
+    """Restore the demo to its starting state: wipe everything the agent
+    produced (calls, SMS, memory) and re-apply the seed, including the clock.
+
+    Rewinding only the clock isn't enough to re-run a demo - the borrowers
+    keep whatever status the simulator last left them in, so the second run
+    starts from 'paid'/'needs_review' instead of 'new'.
+    """
+    with get_conn() as conn:
+        conn.execute("DELETE FROM calls")
+        conn.execute("DELETE FROM sms_messages")
+        conn.execute("DELETE FROM memory")
     seed()
+
+
+if __name__ == "__main__":
+    reset_demo() if len(sys.argv) > 1 and sys.argv[1] == "reset" else seed()
