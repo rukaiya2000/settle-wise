@@ -5,6 +5,16 @@ from . import config
 from .db import get_conn, init_db
 
 
+def reset_db():
+    init_db()
+    with get_conn() as conn:
+        conn.execute("DELETE FROM calls")
+        conn.execute("DELETE FROM sms_messages")
+        conn.execute("DELETE FROM memory")
+        conn.execute("DELETE FROM debts")
+    seed()
+
+
 def seed():
     init_db()
     with open(config.SEED_PATH) as f:
