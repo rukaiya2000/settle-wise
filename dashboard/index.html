@@ -58,6 +58,25 @@
         <div id="progressBarLabel" class="subtle"></div>
       </div>
 
+      <section id="lastCallPanel" class="panel hidden">
+        <div class="panel-head">
+          <h3>Latest call</h3>
+          <span id="lastCallMeta" class="subtle"></span>
+        </div>
+        <div id="lastCallSummary" class="call-summary"></div>
+
+        <div class="split">
+          <div>
+            <h4>What the agent did</h4>
+            <ol id="agentSteps" class="steps"></ol>
+          </div>
+          <div>
+            <h4>Transcript</h4>
+            <div id="lastCallTranscript" class="transcript"></div>
+          </div>
+        </div>
+      </section>
+
       <div class="columns">
         <div>
           <h3>Call history</h3>

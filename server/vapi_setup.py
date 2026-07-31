@@ -114,6 +114,10 @@ def _assistant_body() -> dict:
     return {
         "name": "SettleWise collections agent",
         "firstMessage": "Hello, this is SettleWise calling about your account. Am I speaking with the account holder?",
+        # end-of-call-report carries the transcript and summary; without it a
+        # real call leaves no readable record on the borrower's page.
+        "server": {"url": f"{config.PUBLIC_BASE_URL}/api/vapi/events"},
+        "serverMessages": ["end-of-call-report"],
         # A live phone call can't tolerate the dead air of several sequential
         # tool round-trips before the agent speaks - the first attempt died to
         # silence-timed-out mid-sentence. Give it room, and see the voice-call

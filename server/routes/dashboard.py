@@ -31,11 +31,15 @@ def get_debt_detail(debt_id: str):
         memory = conn.execute(
             "SELECT * FROM memory WHERE debt_id = ? ORDER BY learned_at", (debt_id,)
         ).fetchall()
+        actions = conn.execute(
+            "SELECT * FROM agent_actions WHERE debt_id = ? ORDER BY at", (debt_id,)
+        ).fetchall()
     return {
         "debt": dict(debt),
         "calls": [dict(r) for r in calls],
         "sms_messages": [dict(r) for r in sms],
         "memory": [dict(r) for r in memory],
+        "agent_actions": [dict(r) for r in actions],
     }
 
 

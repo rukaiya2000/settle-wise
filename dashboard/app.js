@@ -156,6 +156,92 @@ async function loadProgress(debtId) {
   document.querySelector("#memoryList").innerHTML = memory.length
     ? memory.map((m) => feedItem(m.key.replace(/_/g, " "), formatClock(m.learned_at), `<div>${m.value}</div>`)).join("")
     : '<div class="feed-empty">Nothing learned yet.</div>';
+
+  renderLastCall(detail);
+}
+
+// Raw tool names mean nothing to someone reading the page, so each one gets a
+// plain-English line built from what it actually returned - a lookup reads
+// differently from an action that changed something.
+const ACTION_LABELS = {
+  get_debt_profile: (a) => ["Looked up the account", a.result ? `${money(a.result.amount_due)} due, status "${(a.result.status || "").replace(/_/g, " ")}"` : ""],
+  get_memory: (a) => ["Checked what we remember", `${(a.result && a.result.memory ? a.result.memory.length : 0)} fact(s) on file`],
+  get_policy: () => ["Checked collections policy", "discount cap, call window, installment limits"],
+  check_call_allowed: (a) => ["Checked it was allowed to call", a.result ? (a.result.allowed ? "allowed" : `blocked - ${a.result.reason}`) : ""],
+  generate_offer_options: (a) => ["Worked out the repayment options", a.result && a.result.offers ? a.result.offers.map((o) => o.type.replace(/_/g, " ")).join(", ") : ""],
+  apply_discount: (a) => ["Checked a discount request", a.result ? (a.result.approved ? `approved - settles at ${money(a.result.settled_amount)}` : `refused - ${a.result.reason}`) : ""],
+  send_sms_payment_link: (a) => ["Sent a payment link by SMS", a.args.amount != null ? money(a.args.amount) : ""],
+  send_sms: (a) => ["Texted the borrower", a.args.body || ""],
+  schedule_sms_reminder: (a) => ["Scheduled an SMS reminder", a.args.send_at ? `for ${formatClock(a.args.send_at)}` : ""],
+  schedule_next_action: (a) => ["Scheduled the next step", `${(a.args.next_action || "").replace(/_/g, " ")} at ${formatClock(a.args.next_action_at)}`],
+  update_debt_status: (a) => ["Updated the account status", (a.args.status || "").replace(/_/g, " ")],
+  write_memory: (a) => ["Remembered something new", `${(a.args.key || "").replace(/_/g, " ")}: ${a.args.value || ""}`],
+  mark_needs_review: (a) => ["Escalated to human review", a.args.reason || ""],
+  record_call_event: (a) => ["Logged the call outcome", `${(a.args.outcome || "").replace(/_/g, " ")}${a.args.amount_promised != null ? " - promised " + money(a.args.amount_promised) : ""}`],
+};
+
+// Lookups vs. actions that changed something - worth telling apart visually.
+const READ_TOOLS = new Set(["get_debt_profile", "get_memory", "get_policy", "check_call_allowed", "generate_offer_options", "apply_discount"]);
+
+function parseJson(value, fallback) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function renderLastCall(detail) {
+  const panel = document.querySelector("#lastCallPanel");
+  const calls = detail.calls || [];
+  const actions = detail.agent_actions || [];
+
+  if (!calls.length && !actions.length) {
+    panel.classList.add("hidden");
+    return;
+  }
+  panel.classList.remove("hidden");
+
+  const last = calls.length ? calls[calls.length - 1] : null;
+
+  document.querySelector("#lastCallMeta").textContent = last
+    ? `${formatClock(last.started_at)} · ${(last.outcome || "").replace(/_/g, " ")}`
+    : "no call recorded yet";
+  document.querySelector("#lastCallSummary").textContent = last && last.summary ? last.summary : "";
+
+  const transcriptEl = document.querySelector("#lastCallTranscript");
+  if (last && last.transcript) {
+    transcriptEl.innerHTML = last.transcript
+      .split("\n")
+      .filter((line) => line.trim())
+      .map((line) => {
+        const isAgent = /^(AI|Agent)\s*:/i.test(line);
+        const text = line.replace(/^(AI|Agent|User|Borrower)\s*:\s*/i, "");
+        return `<div class="turn ${isAgent ? "agent" : "borrower"}"><span class="who">${isAgent ? "Agent" : "Borrower"}</span>${text}</div>`;
+      })
+      .join("");
+  } else {
+    transcriptEl.innerHTML = '<div class="feed-empty">No transcript for this call.</div>';
+  }
+
+  const stepsEl = document.querySelector("#agentSteps");
+  stepsEl.innerHTML = actions.length
+    ? actions
+        .map((a) => {
+          const args = parseJson(a.arguments, {});
+          const result = parseJson(a.result, null);
+          const label = ACTION_LABELS[a.tool];
+          const [title, detailText] = label ? label({ args, result }) : [a.tool.replace(/_/g, " "), ""];
+          const kind = READ_TOOLS.has(a.tool) ? "read" : "write";
+          return `
+            <li class="step ${kind}">
+              <div class="step-title">${title}</div>
+              ${detailText ? `<div class="step-detail">${detailText}</div>` : ""}
+              <div class="step-tool">${a.tool}</div>
+            </li>`;
+        })
+        .join("")
+    : '<div class="feed-empty">No recorded agent actions yet.</div>';
 }
 
 async function runAgent(debtId) {

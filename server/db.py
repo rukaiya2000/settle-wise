@@ -52,6 +52,20 @@ CREATE TABLE IF NOT EXISTS memory (
     learned_at TEXT NOT NULL
 );
 
+-- Every tool the agent invoked, in order. This is the audit trail behind
+-- "what the agent actually did" on the borrower's page: without it a real
+-- call leaves only a transcript, with no record of which facts it looked up
+-- or which actions it took.
+CREATE TABLE IF NOT EXISTS agent_actions (
+    id TEXT PRIMARY KEY,
+    debt_id TEXT,
+    tool TEXT NOT NULL,
+    arguments TEXT,
+    result TEXT,
+    source TEXT NOT NULL DEFAULT 'voice',
+    at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS demo_clock (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     current_time TEXT NOT NULL,

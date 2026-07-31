@@ -236,3 +236,116 @@ button.ghost {
   .columns { grid-template-columns: 1fr; }
   .topbar { flex-direction: column; align-items: flex-start; gap: 10px; }
 }
+
+/* --- Latest call panel: what the agent actually did --- */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-bottom: 24px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.panel-head h3 {
+  margin: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--subtle);
+}
+
+.call-summary {
+  font-size: 15px;
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+
+.call-summary:empty { display: none; }
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.split h4 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--subtle);
+  margin: 0 0 10px;
+}
+
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* The trace can run long on a multi-turn call; keep the panel a sane
+     height and let the steps scroll instead of pushing the page down. */
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.step {
+  position: relative;
+  padding: 0 0 14px 18px;
+  border-left: 2px solid var(--border);
+  font-size: 13px;
+}
+
+.step:last-child { border-left-color: transparent; padding-bottom: 0; }
+
+.step::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+/* A lookup and a state change read very differently - colour tells them
+   apart at a glance. */
+.step.read::before { background: var(--blue); }
+.step.write::before { background: var(--teal); }
+
+.step-title { font-weight: 600; }
+.step-detail { color: var(--text); opacity: 0.75; margin-top: 1px; }
+.step-tool {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--subtle);
+  margin-top: 2px;
+}
+
+.transcript {
+  max-height: 340px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.turn { margin-bottom: 10px; }
+.turn .who {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--subtle);
+  margin-bottom: 1px;
+}
+.turn.agent .who { color: var(--teal); }
+
+@media (max-width: 760px) {
+  .split { grid-template-columns: 1fr; }
+}
