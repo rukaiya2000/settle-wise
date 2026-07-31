@@ -17,13 +17,16 @@ implementation in server/agent/tools.py.
 
 import json
 import re
+import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+import requests
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from loguru import logger
 
 from .. import config
+from ..agent.post_call_analysis import analyze_post_call
 from ..agent import tools as agent_tools
 from ..agent.tool_registry import TOOL_DEFS
 from ..db import get_conn
@@ -35,7 +38,7 @@ TOOLS_BY_NAME = {t["name"]: t for t in TOOL_DEFS}
 
 
 @router.post("/api/debts/{debt_id}/call")
-def call_borrower(debt_id: str):
+def call_borrower(debt_id: str, background_tasks: BackgroundTasks):
     """Place a real outbound call to this borrower's phone (the dashboard's
     'Call borrower' button). Distinct from /run-agent, which runs the
     deterministic simulator and never dials out."""
@@ -54,6 +57,9 @@ def call_borrower(debt_id: str):
         call = place_call(debt["phone"], debt_id)
     except SystemExit as e:  # vapi_setup raises SystemExit on API errors
         raise HTTPException(502, f"Vapi call failed: {e}")
+
+    if call.get("id"):
+        background_tasks.add_task(poll_vapi_call_until_ended, call["id"])
 
     logger.info(f"[outbound call] {debt['name']} {debt['phone']} -> vapi call {call.get('id')}")
     return {
@@ -160,6 +166,60 @@ async def vapi_event_webhook(body: dict):
     return {"ok": True}
 
 
+def poll_vapi_call_until_ended(call_id: str, max_wait_seconds: int = 300, interval_seconds: int = 5):
+    """Poll Vapi for the final call artifact when webhooks are delayed/missed.
+
+    This is intentionally tied to the outbound call id returned by Vapi, so a
+    dashboard-triggered call does not depend on manual backfill or webhook
+    delivery. If the webhook also arrives, _upsert_call_report is idempotent by
+    Vapi call id.
+    """
+    deadline = time.monotonic() + max_wait_seconds
+    last_status = None
+
+    while time.monotonic() < deadline:
+        try:
+            call = _fetch_vapi_call(call_id)
+        except Exception:
+            logger.exception(f"[vapi poller] failed to fetch call={call_id}")
+            time.sleep(interval_seconds)
+            continue
+
+        last_status = call.get("status")
+        transcript = call.get("transcript") or (call.get("artifact") or {}).get("transcript")
+        if last_status == "ended" or call.get("endedAt") or transcript:
+            logger.info(f"[vapi poller] processing ended call={call_id} status={last_status}")
+            try:
+                _handle_end_of_call_report(_message_from_vapi_call(call))
+            except Exception:
+                logger.exception(f"[vapi poller] failed to process ended call={call_id}")
+            return
+
+        time.sleep(interval_seconds)
+
+    logger.warning(f"[vapi poller] timed out waiting for call={call_id}, last_status={last_status}")
+
+
+def _fetch_vapi_call(call_id: str) -> dict:
+    from ..vapi_setup import VAPI_API, _headers
+
+    response = requests.get(f"{VAPI_API}/call/{call_id}", headers=_headers(), timeout=30)
+    if not response.ok:
+        raise RuntimeError(f"GET /call/{call_id} failed: {response.status_code} {response.text[:1000]}")
+    return response.json()
+
+
+def _message_from_vapi_call(call: dict) -> dict:
+    return {
+        "type": "end-of-call-report",
+        "call": call,
+        "endedReason": call.get("endedReason"),
+        "transcript": call.get("transcript") or (call.get("artifact") or {}).get("transcript") or "",
+        "artifact": call.get("artifact") or {},
+        "analysis": call.get("analysis") or {},
+    }
+
+
 def _handle_end_of_call_report(message: dict) -> dict:
     debt_id = _debt_id(message)
     if not debt_id:
@@ -172,11 +232,24 @@ def _handle_end_of_call_report(message: dict) -> dict:
         return {"received": True, "stored": False, "reason": "unknown debt_id"}
 
     transcript = _transcript(message)
-    summary = _summary(message)
-    outcome = _outcome(message, transcript, summary)
+    call_id = _upsert_call_report(
+        message,
+        debt_id,
+        outcome="analysis_pending",
+        summary="Post-call analysis pending.",
+        transcript=transcript,
+    )
+    ended_reason = str(message.get("endedReason") or "")
+    try:
+        analysis = analyze_post_call(debt, transcript, ended_reason=ended_reason)
+    except Exception as e:
+        logger.exception(f"[vapi end-of-call] post-call analysis failed for debt={debt_id} call={_call_id(message)}")
+        raise HTTPException(502, f"post-call analysis failed: {e}")
+
+    summary = analysis["summary"]
+    outcome = analysis["outcome"]
     call_id = _upsert_call_report(message, debt_id, outcome, summary, transcript)
-    memory_written = _write_fallback_memory(debt_id, transcript, summary)
-    next_action = _ensure_next_action(debt_id, outcome, summary)
+    applied = _apply_post_call_analysis(debt_id, analysis)
 
     logger.info(
         f"[vapi end-of-call] debt={debt_id} call={_call_id(message)} "
@@ -188,8 +261,8 @@ def _handle_end_of_call_report(message: dict) -> dict:
         "debt_id": debt_id,
         "call_id": call_id,
         "outcome": outcome,
-        "memory_written": memory_written,
-        "next_action": next_action,
+        "analysis": analysis,
+        "applied": applied,
     }
 
 
@@ -246,34 +319,6 @@ def _transcript(message: dict) -> str:
         if text:
             lines.append(f"{role}: {text}")
     return "\n".join(lines)
-
-
-def _summary(message: dict) -> str:
-    analysis = message.get("analysis") or {}
-    structured = analysis.get("structuredData") or {}
-    summary = (
-        message.get("summary")
-        or analysis.get("summary")
-        or structured.get("summary")
-        or message.get("endedReason")
-        or "Vapi call ended."
-    )
-    return str(summary)
-
-
-def _outcome(message: dict, transcript: str, summary: str) -> str:
-    text = f"{message.get('endedReason', '')} {summary}".lower()
-    if any(term in text for term in ["dispute", "wrong person", "fraud", "identity theft"]):
-        return "needs_review"
-    if any(term in text for term in ["paid", "payment completed"]):
-        return "paid"
-    if any(term in text for term in ["promise", "promised", "agreed to pay", "payment link"]):
-        return "promised"
-    if any(term in text for term in ["callback", "call back", "later"]):
-        return "callback_requested"
-    if not transcript.strip() or any(term in text for term in ["no-answer", "busy", "voicemail", "silence-timed-out"]):
-        return "no_answer"
-    return "answered"
 
 
 def _upsert_call_report(message: dict, debt_id: str, outcome: str, summary: str, transcript: str) -> str:
@@ -348,51 +393,28 @@ def _stored_call_id(message: dict) -> str | None:
     return f"vapi_{normalized[:48]}" if normalized else None
 
 
-def _write_fallback_memory(debt_id: str, transcript: str, summary: str) -> list[dict]:
-    text = f"{transcript}\n{summary}"
-    written = []
+def _apply_post_call_analysis(debt_id: str, analysis: dict) -> dict:
+    memory = [
+        agent_tools.write_memory(debt_id, fact["key"], fact["value"])
+        for fact in analysis.get("memory_facts", [])
+    ]
 
-    salary_match = re.search(
-        r"\b(?:salary|payday|paid)\s+(?:is\s+)?(?:on\s+)?([A-Za-z]+day|[A-Za-z]{3,9}\s+\d{1,2}|\d{1,2}/\d{1,2}|\d{4}-\d{2}-\d{2})",
-        text,
-        re.IGNORECASE,
-    )
-    if salary_match:
-        written.append(agent_tools.write_memory(debt_id, "salary_date", salary_match.group(1)))
+    next_action = analysis.get("next_action") or {}
+    action_type = next_action.get("type", "none")
+    reason = next_action.get("reason") or analysis["summary"]
+    applied_action = None
 
-    if re.search(r"\b(?:do not call|stop calling|no more calls|don't call)\b", text, re.IGNORECASE):
-        written.append(agent_tools.write_memory(debt_id, "no_contact", "Borrower asked not to be called again."))
+    if action_type == "human_review":
+        applied_action = agent_tools.mark_needs_review(debt_id, reason)
+    elif action_type in {"call_borrower", "send_sms_reminder"}:
+        at = next_action.get("at")
+        if at:
+            applied_action = agent_tools.schedule_next_action(debt_id, action_type, at, reason=reason)
+    elif action_type == "none" and analysis["outcome"] in {"paid", "promised", "no_answer", "answered", "callback_requested"}:
+        applied_action = agent_tools.update_debt_status(
+            debt_id,
+            status=analysis["outcome"],
+            last_call_summary=analysis["summary"],
+        )
 
-    callback_match = re.search(
-        r"\b(?:call me back|callback|call back)\s+(?:on\s+|at\s+|after\s+)?([A-Za-z]+day|tomorrow|[A-Za-z]{3,9}\s+\d{1,2}|\d{1,2}(?::\d{2})?\s*(?:am|pm)?)",
-        text,
-        re.IGNORECASE,
-    )
-    if callback_match:
-        written.append(agent_tools.write_memory(debt_id, "callback_preference", callback_match.group(1)))
-
-    return written
-
-
-def _ensure_next_action(debt_id: str, outcome: str, summary: str) -> dict | None:
-    debt = agent_tools.get_debt_profile(debt_id)
-    if "error" in debt or debt["status"] not in {"new", "no_answer"}:
-        return None
-
-    if outcome in {"paid", "needs_review", "promised"}:
-        return None
-
-    next_time = _next_action_at(summary)
-    return agent_tools.schedule_next_action(
-        debt_id,
-        next_action="call_borrower",
-        next_action_at=next_time,
-        reason=summary,
-    )
-
-
-def _next_action_at(summary: str) -> str:
-    now = get_demo_now()
-    if re.search(r"\btomorrow\b", summary, re.IGNORECASE):
-        return (now + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0).isoformat()
-    return (now + timedelta(days=1)).isoformat()
+    return {"memory": memory, "next_action": applied_action}

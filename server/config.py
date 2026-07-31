@@ -34,10 +34,16 @@ A1MOBILE_LIVE_SMS = os.getenv("A1MOBILE_LIVE_SMS", "false").lower() == "true"
 # voice agent itself since it can't proxy the realtime WebSocket API.
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "") or None
+OPENAI_POST_CALL_MODEL = os.getenv("OPENAI_POST_CALL_MODEL", "gpt-5.6-sol")
 
 # Direct OpenAI key for the realtime speech-to-speech voice agent (wss://api.openai.com).
 OPENAI_REALTIME_API_KEY = os.getenv("OPENAI_REALTIME_API_KEY", "")
 OPENAI_REALTIME_MODEL = os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime-2.1")
+OPENAI_POST_CALL_API_KEY = os.getenv("OPENAI_POST_CALL_API_KEY", OPENAI_REALTIME_API_KEY or OPENAI_API_KEY)
+OPENAI_POST_CALL_BASE_URL = os.getenv(
+    "OPENAI_POST_CALL_BASE_URL",
+    "https://api.openai.com/v1" if OPENAI_REALTIME_API_KEY else (OPENAI_BASE_URL or "https://api.openai.com/v1"),
+)
 
 DB_PATH = os.getenv("DB_PATH", str(BASE_DIR / "data" / "settlewise.db"))
 SEED_PATH = os.getenv("SEED_PATH", str(BASE_DIR / "data" / "seed.json"))

@@ -1,10 +1,11 @@
 """Dashboard API backing the profiles/progress screens (md/dashboard-spec.md)."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from ..agent import tools as agent_tools
 from ..agent.simulated_call import run_simulated_call
 from ..db import get_conn
+from .vapi import poll_vapi_call_until_ended
 from ..seed import reset_db
 from ..vapi_setup import place_call
 
@@ -118,7 +119,7 @@ def run_agent(debt_id: str, force: bool = False):
 
 
 @router.post("/api/debts/{debt_id}/call-agent")
-def call_agent(debt_id: str):
+def call_agent(debt_id: str, background_tasks: BackgroundTasks):
     """Place a real outbound phone call through Vapi's a1mobile SIP trunk."""
     debt = agent_tools.get_debt_profile(debt_id)
     if "error" in debt:
@@ -128,6 +129,8 @@ def call_agent(debt_id: str):
     if debt["status"] == "needs_review":
         raise HTTPException(400, "needs_review")
     result = place_call(debt["phone"], debt_id)
+    if result.get("id"):
+        background_tasks.add_task(poll_vapi_call_until_ended, result["id"])
     return {"debt_id": debt_id, "phone": debt["phone"], "result": result}
 
 
