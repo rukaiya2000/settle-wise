@@ -379,3 +379,25 @@ def send_sms_now(debt_id: str, body: str | None = None, sms_type: str = "custom"
         "sent_live": True,
         "provider": send_result,
     }
+
+
+def flag_borrower(debt_id: str, reason: str, severity: str = "warning") -> dict:
+    """Record a conduct problem (abuse, threats, refusing to engage) on the
+    profile so the next person to pick this up sees it before dialling.
+
+    severity "warning" notes it but leaves the account collectable;
+    "abuse" also suspends automated collection by routing to human review,
+    per the escalation triggers in md/human-review.md.
+    """
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO memory (id, debt_id, key, value, learned_at) VALUES (?, ?, 'conduct_flag', ?, ?)",
+            (f"mem_{uuid.uuid4().hex[:8]}", debt_id, f"[{severity}] {reason}", _now_iso()),
+        )
+        if severity == "abuse":
+            conn.execute(
+                "UPDATE debts SET status = 'needs_review', next_action = 'human_review', "
+                "next_action_at = NULL, last_call_summary = ? WHERE id = ?",
+                (f"Call ended early - {reason}", debt_id),
+            )
+    return {"debt_id": debt_id, "flagged": True, "severity": severity, "reason": reason}

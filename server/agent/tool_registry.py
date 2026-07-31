@@ -154,6 +154,22 @@ TOOL_DEFS = [
         "fn": agent_tools.write_memory,
     },
     {
+        "name": "flag_borrower",
+        "description": (
+            "Record a conduct problem on the borrower's profile - abuse, threats, or flat refusal "
+            "to engage after warnings - so whoever picks this up next sees it before dialling. "
+            "Use severity 'warning' to note it while keeping the account collectable, or 'abuse' "
+            "to also suspend automated collection and route to human review."
+        ),
+        "properties": {
+            "debt_id": {"type": "string"},
+            "reason": {"type": "string", "description": "Factual description of what happened. No judgement or insults."},
+            "severity": {"type": "string", "enum": ["warning", "abuse"]},
+        },
+        "required": ["debt_id", "reason"],
+        "fn": agent_tools.flag_borrower,
+    },
+    {
         "name": "mark_needs_review",
         "description": "Stop collection and escalate this debt to human review (dispute, fraud, wrong party, hardship, low confidence, abusive borrower, out-of-policy settlement).",
         "properties": {

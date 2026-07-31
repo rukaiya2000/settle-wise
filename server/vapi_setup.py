@@ -111,6 +111,11 @@ def _assistant_body() -> dict:
         for t in TOOL_DEFS
     ]
 
+    # Vapi's built-in hang-up. Our own tools can only touch the database -
+    # actually dropping the line has to come from the telephony layer, so the
+    # agent can't end an abusive call without this.
+    tools.append({"type": "endCall"})
+
     return {
         "name": "SettleWise collections agent",
         "firstMessage": "Hello, this is SettleWise calling about your account. Am I speaking with the account holder?",
@@ -147,7 +152,14 @@ def _assistant_body() -> dict:
                     "- Only call a tool when you are about to CHANGE something (send a payment "
                     "link, schedule a reminder, record the outcome, write memory, escalate) or "
                     "when you need offer options you don't already have.\n"
-                    "- Say the numbers naturally: 'four hundred and twenty dollars', not '420.0'.",
+                    "- Say the numbers naturally: 'four hundred and twenty dollars', not '420.0'. "
+                    "Always say 'dollars'. If they say the amount in rupees, euros or anything "
+                    "else, correct them once, politely, and carry on in dollars.\n"
+                    "- To hang up, use the endCall tool. Say your closing line FIRST and wait "
+                    "for it to finish speaking, then call endCall - calling it too early cuts "
+                    "your own goodbye off mid-word.\n"
+                    "- Always end with a warm close ('Thanks for your time, have a great day') "
+                    "before hanging up, including when the borrower was difficult.",
                 }
             ],
             "tools": tools,
