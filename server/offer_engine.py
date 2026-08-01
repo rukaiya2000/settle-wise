@@ -61,21 +61,7 @@ def generate_offer_options(
             {
                 "type": "due_now",
                 "amount": due_now,
-                "note": f"the instalment due today - ask for this first, never more",
-            }
-        )
-        # The standing arrangement: same amount every cycle until cleared.
-        offers.append(
-            {
-                "type": "payment_plan",
-                "amount_per_payment": due_now,
-                "every_days": cycle_days,
-                "number_of_payments": t["cycles_to_clear"],
-                "schedule": _schedule(due_now, remaining, cycle_days, today),
-                "note": (
-                    f"${due_now:g} today, then ${due_now:g} every {cycle_days} days until the "
-                    f"balance is clear ({t['cycles_to_clear']} payments)"
-                ),
+                "note": "due today - ask for this. Payment is expected today, not spread over weeks.",
             }
         )
         if borrower_can_pay_today is not None and borrower_can_pay_today < due_now:
@@ -114,9 +100,10 @@ def generate_offer_options(
             "call and escalate with mark_needs_review."
             if below_floor
             else (
-                f"Ask for {due_now:g} today. If they can't manage it in one go, offer the plan: "
-                f"{due_now:g} every {cycle_days} days. Never ask for more than {due_now:g} at a "
-                f"time, and never accept less than {floor:g}."
+                f"Payment is due TODAY. Ask for {due_now:g}. If they push back, negotiate down "
+                f"within the band but NEVER below {floor:g} - that is a hard floor, not an opening "
+                f"position. Do not offer to spread this over days or weeks. If they cannot pay "
+                f"anything at all, stop and escalate with mark_needs_review."
             )
         ),
     }
