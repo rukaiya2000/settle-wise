@@ -24,21 +24,6 @@ TOOL_DEFS = [
         "fn": agent_tools.get_memory,
     },
     {
-        "name": "verify_identity",
-        "description": (
-            "Verify you are speaking to the account holder by checking the last 4 digits of their "
-            "account reference. Call this BEFORE disclosing any balance, date, or account detail. "
-            "You do not know the correct digits and must never guess, hint at, or confirm them - "
-            "ask the borrower, pass exactly what they say to this tool, and act on the result."
-        ),
-        "properties": {
-            "debt_id": {"type": "string"},
-            "last4": {"type": "string", "description": "The 4 digits the borrower said, digits only."},
-        },
-        "required": ["debt_id", "last4"],
-        "fn": agent_tools.verify_identity,
-    },
-    {
         "name": "get_payment_history",
         "description": (
             "What has actually been sent and paid on this account: every SMS payment link, its "
@@ -66,7 +51,13 @@ TOOL_DEFS = [
     },
     {
         "name": "generate_offer_options",
-        "description": "Get the approved repayment options for this debt (pay today, partial, installment, discount), optionally given what the borrower says they can pay today.",
+        "description": (
+            "Get the approved repayment options. Returns due_now (the instalment due this cycle - "
+            "ask for this, NOT the whole balance), minimum_acceptable_today (a hard floor), and "
+            "below_floor. If below_floor is true the offer list is empty: do not accept, do not "
+            "counter, stop negotiating and call mark_needs_review. Pass borrower_can_pay_today "
+            "whenever they name an amount."
+        ),
         "properties": {
             "debt_id": {"type": "string"},
             "borrower_can_pay_today": {"type": "number"},

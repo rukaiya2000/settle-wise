@@ -81,6 +81,14 @@ CREATE TABLE IF NOT EXISTS demo_clock (
 CREATE TABLE IF NOT EXISTS policies (
     id TEXT PRIMARY KEY,
     max_discount_percent REAL NOT NULL,
+    -- Share of the total balance being collected on this call. The agent asks
+    -- for this, not the whole balance.
+    due_now_percent REAL NOT NULL DEFAULT 10,
+    -- Days between instalments; the same due_now amount repeats on this
+    -- cadence until the balance is cleared.
+    cycle_days INTEGER NOT NULL DEFAULT 5,
+    -- Hard floor: nothing below this is acceptable today. Enforced in
+    -- offer_engine, not just the prompt, so the agent can't be talked under it.
     min_payment_today_percent REAL NOT NULL,
     max_installments INTEGER NOT NULL,
     call_attempts_per_day INTEGER NOT NULL,
@@ -100,6 +108,17 @@ def _migrate(conn):
     if "account_ref" not in existing:
         conn.execute("ALTER TABLE debts ADD COLUMN account_ref TEXT")
 
+    pol = {r[1] for r in conn.execute("PRAGMA table_info(policies)")}
+    if "due_now_percent" not in pol:
+        conn.execute("ALTER TABLE policies ADD COLUMN due_now_percent REAL NOT NULL DEFAULT 10")
+    if "cycle_days" not in pol:
+        conn.execute("ALTER TABLE policies ADD COLUMN cycle_days INTEGER NOT NULL DEFAULT 5")
+    # The floor used to be 20% of the balance; it is now the 5% hard minimum.
+    conn.execute(
+        "UPDATE policies SET due_now_percent = ?, min_payment_today_percent = ?, cycle_days = ? WHERE id = ?",
+        (config.DUE_NOW_PCT, config.MIN_PAYMENT_PCT, config.CYCLE_DAYS, DEFAULT_POLICY_ID),
+    )
+
 
 def init_db():
     Path(config.DB_PATH).parent.mkdir(parents=True, exist_ok=True)
@@ -112,13 +131,15 @@ def init_db():
     )
     conn.execute(
         """INSERT OR IGNORE INTO policies
-        (id, max_discount_percent, min_payment_today_percent, max_installments,
+        (id, max_discount_percent, due_now_percent, cycle_days, min_payment_today_percent, max_installments,
          call_attempts_per_day, allowed_call_hours_start, allowed_call_hours_end, human_review_triggers)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             DEFAULT_POLICY_ID,
             config.MAX_DISCOUNT_PCT,
-            20,
+            config.DUE_NOW_PCT,
+            config.CYCLE_DAYS,
+            config.MIN_PAYMENT_PCT,
             3,
             2,
             "09:00",

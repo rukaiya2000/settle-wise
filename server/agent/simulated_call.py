@@ -45,7 +45,7 @@ def _pick_outcome(seed: str, call_count: int) -> str:
 
 
 def run_simulated_call(debt_id: str) -> dict:
-    debt = agent_tools.get_debt_profile(debt_id)
+    debt = agent_tools._debt_row(debt_id)
     if "error" in debt:
         return debt
 

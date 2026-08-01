@@ -28,8 +28,11 @@ VAPI_ASSISTANT_ID = os.getenv("VAPI_ASSISTANT_ID", "")
 # models from its own list and rejects "gpt-realtime-2.1".
 # Set VAPI_MODEL=gpt-4.1 in .env to fall back to the cascade pipeline.
 VAPI_MODEL = os.getenv("VAPI_MODEL", "gpt-realtime-2025-08-28")
-# Realtime only supports OpenAI's own voices: alloy, echo, shimmer, marin, cedar.
+# Realtime only supports OpenAI's own voices (alloy, echo, shimmer, marin,
+# cedar); on a cascade model any provider works. VAPI_VOICE_PROVIDER lets
+# you swap TTS without touching code if articulation is poor.
 VAPI_VOICE = os.getenv("VAPI_VOICE", "alloy")
+VAPI_VOICE_PROVIDER = os.getenv("VAPI_VOICE_PROVIDER", "openai")
 
 # No trailing slash, e.g. https://abcd1234.ngrok-free.app
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
@@ -58,6 +61,16 @@ DB_PATH = os.getenv("DB_PATH", str(BASE_DIR / "data" / "settlewise.db"))
 SEED_PATH = os.getenv("SEED_PATH", str(BASE_DIR / "data" / "seed.json"))
 
 MAX_DISCOUNT_PCT = float(os.getenv("MAX_DISCOUNT_PCT", "15"))
+
+# What the agent actually collects on a call: DUE_NOW_PCT of the balance is
+# due this cycle, and MIN_PAYMENT_PCT is a hard floor - anything below it is
+# refused in code (server/offer_engine.py) and routed to a human, so the
+# borrower can't negotiate the agent under it.
+DUE_NOW_PCT = float(os.getenv("DUE_NOW_PCT", "10"))
+MIN_PAYMENT_PCT = float(os.getenv("MIN_PAYMENT_PCT", "5"))
+# The instalment repeats every CYCLE_DAYS until the balance is cleared,
+# so 10% every 5 days settles a balance in 50 days.
+CYCLE_DAYS = int(os.getenv("CYCLE_DAYS", "5"))
 
 # Demo clock (md/technical-spec.md) - fake controllable time so 30 days of
 # collections activity can be compressed into a short demo.

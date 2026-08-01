@@ -1,11 +1,45 @@
 """Deterministic offer generation per md/technical-spec.md "Agent Tool Surface".
 
-Policy-driven: max discount, min payment-today percent, and installment cap
-come from the synthetic policy (server/policy.py) rather than being
-hardcoded, so tuning the demo happens in one place. The agent must not
-invent an offer outside what this returns (md/agent-behavior.md negotiation
-rules).
+Repayment runs on a cycle: `due_now_percent` of the balance is due now, and
+the same amount again every `cycle_days` until the balance clears - 10% every
+5 days settles it in 50 days. The agent never asks for more than one cycle's
+worth at a time.
+
+Below the cycle amount sits a hard floor (`min_payment_today_percent` of the
+balance). It applies to what they commit to *for this cycle*, and is enforced
+here in code rather than left to the prompt, so a persistent borrower cannot
+talk the agent under it. Anything lower comes back with an empty offer list
+and a flag to escalate.
 """
+
+from datetime import timedelta
+
+
+def payment_targets(amount_due: float, amount_collected: float, policy: dict) -> dict:
+    """The numbers every offer is derived from."""
+    remaining = round(amount_due - amount_collected, 2)
+    due_now = round(remaining * (policy["due_now_percent"] / 100), 2)
+    return {
+        "remaining": remaining,
+        "due_now": due_now,
+        "floor": round(remaining * (policy["min_payment_today_percent"] / 100), 2),
+        "cycle_days": int(policy.get("cycle_days") or 5),
+        # How many cycles at this rate clear the balance.
+        "cycles_to_clear": max(1, int(-(-remaining // due_now))) if due_now > 0 else 1,
+    }
+
+
+def _schedule(due_now: float, remaining: float, cycle_days: int, start) -> list[dict]:
+    """The recurring plan: due_now every cycle_days until nothing is left."""
+    plan, owed, when, n = [], remaining, start, 0
+    while owed > 0.005 and n < 60:  # 60 = runaway guard, not a policy limit
+        amount = round(min(due_now, owed), 2)
+        plan.append({"amount": amount, "on": when.strftime("%Y-%m-%d") if when else None})
+        owed = round(owed - amount, 2)
+        if when:
+            when = when + timedelta(days=cycle_days)
+        n += 1
+    return plan
 
 
 def generate_offer_options(
@@ -14,40 +48,78 @@ def generate_offer_options(
     policy: dict,
     borrower_can_pay_today: float | None = None,
     has_future_income_date: bool = False,
-) -> list[dict]:
-    remaining = round(amount_due - amount_collected, 2)
-    offers = [{"type": "pay_today", "amount": remaining}]
+    today=None,
+) -> dict:
+    t = payment_targets(amount_due, amount_collected, policy)
+    remaining, due_now, floor, cycle_days = t["remaining"], t["due_now"], t["floor"], t["cycle_days"]
 
-    if borrower_can_pay_today is not None and borrower_can_pay_today < remaining:
-        min_today = round(remaining * (policy["min_payment_today_percent"] / 100), 2)
-        amount_today = max(borrower_can_pay_today, 0)
-        amount_today = max(amount_today, min_today) if amount_today > 0 else min_today
-        amount_today = min(amount_today, remaining)
+    below_floor = borrower_can_pay_today is not None and borrower_can_pay_today < floor
+
+    offers = []
+    if not below_floor:
         offers.append(
             {
-                "type": "partial",
-                "amount_today": amount_today,
-                "remaining": round(remaining - amount_today, 2),
+                "type": "due_now",
+                "amount": due_now,
+                "note": f"the instalment due today - ask for this first, never more",
             }
         )
+        # The standing arrangement: same amount every cycle until cleared.
+        offers.append(
+            {
+                "type": "payment_plan",
+                "amount_per_payment": due_now,
+                "every_days": cycle_days,
+                "number_of_payments": t["cycles_to_clear"],
+                "schedule": _schedule(due_now, remaining, cycle_days, today),
+                "note": (
+                    f"${due_now:g} today, then ${due_now:g} every {cycle_days} days until the "
+                    f"balance is clear ({t['cycles_to_clear']} payments)"
+                ),
+            }
+        )
+        if borrower_can_pay_today is not None and borrower_can_pay_today < due_now:
+            # At or above the floor but short of the cycle amount: take it and
+            # carry the shortfall into this cycle.
+            amount_today = round(borrower_can_pay_today, 2)
+            offers.append(
+                {
+                    "type": "partial",
+                    "amount_today": amount_today,
+                    "short_this_cycle": round(due_now - amount_today, 2),
+                }
+            )
+        max_discount_amount = round(due_now * (policy["max_discount_percent"] / 100), 2)
+        discounted = round(due_now - max_discount_amount, 2)
+        if discounted >= floor:
+            offers.append(
+                {
+                    "type": "discount_settlement",
+                    "amount": discounted,
+                    "max_discount_percent": policy["max_discount_percent"],
+                }
+            )
 
-    if has_future_income_date and policy["max_installments"] > 1:
-        n = int(policy["max_installments"])
-        base = round(remaining / n, 2)
-        installments = [base] * (n - 1)
-        installments.append(round(remaining - base * (n - 1), 2))
-        offers.append({"type": "installment", "installments": installments})
-
-    max_discount_amount = round(remaining * (policy["max_discount_percent"] / 100), 2)
-    offers.append(
-        {
-            "type": "discount_settlement",
-            "amount": round(remaining - max_discount_amount, 2),
-            "max_discount_percent": policy["max_discount_percent"],
-        }
-    )
-
-    return offers
+    return {
+        "total_outstanding": remaining,
+        "due_now": due_now,
+        "minimum_acceptable_today": floor,
+        "cycle_days": cycle_days,
+        "payments_to_clear": t["cycles_to_clear"],
+        "offers": offers,
+        "below_floor": below_floor,
+        "instruction": (
+            f"They offered less than the minimum of {floor:g} for this cycle. Do not accept it, "
+            "do not counter, and do not keep negotiating - say you can't agree to that on this "
+            "call and escalate with mark_needs_review."
+            if below_floor
+            else (
+                f"Ask for {due_now:g} today. If they can't manage it in one go, offer the plan: "
+                f"{due_now:g} every {cycle_days} days. Never ask for more than {due_now:g} at a "
+                f"time, and never accept less than {floor:g}."
+            )
+        ),
+    }
 
 
 def apply_discount(remaining: float, requested_pct: float, policy: dict) -> float | None:

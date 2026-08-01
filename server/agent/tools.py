@@ -26,42 +26,42 @@ def _now_iso() -> str:
 # --- Read tools --------------------------------------------------------
 
 
-def get_debt_profile(debt_id: str) -> dict:
+def _debt_row(debt_id: str) -> dict:
+    """Raw debt record for internal use - keeps amount_due as-is."""
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM debts WHERE id = ?", (debt_id,)).fetchone()
     debt = row_to_dict(row)
     if debt is None:
         return {"error": f"No debt found for id {debt_id}"}
-    # The account reference is the identity-check secret. Never hand it to the
-    # agent: it only proves identity if the agent cannot see, hint at, or be
-    # persuaded to confirm the digits. verify_identity checks it server-side.
+    # The account reference is an identity secret; never hand it to the agent.
     debt.pop("account_ref", None)
     return debt
 
 
-def verify_identity(debt_id: str, last4: str) -> dict:
-    """Check the last 4 digits of the borrower's account reference.
+def get_debt_profile(debt_id: str) -> dict:
+    """Agent-facing view. Deliberately does NOT expose a bare `amount_due`.
 
-    Compared server-side so the agent never handles the real value. Returns
-    only a boolean - no hint, no partial match, no "close" - so a failed
-    attempt leaks nothing about the correct answer.
+    The agent asks for one cycle's instalment, never the whole balance - but
+    it reads whatever the tool returns, so a plain `amount_due: 50000` gets
+    quoted verbatim as "fifty thousand is due". The field is renamed to make
+    that impossible to do by accident, and the instalment is attached here so
+    the right number is present whichever tool the agent reaches for.
     """
-    with get_conn() as conn:
-        row = conn.execute("SELECT account_ref FROM debts WHERE id = ?", (debt_id,)).fetchone()
-    if row is None:
-        return {"error": f"No debt found for id {debt_id}"}
+    debt = _debt_row(debt_id)
+    if "error" in debt:
+        return debt
 
-    account_ref = (row["account_ref"] or "").strip()
-    if not account_ref:
-        # Nothing on file to check against - don't silently pass someone
-        # through, hand it to a human instead.
-        return {"verified": False, "reason": "no account reference on file for this borrower"}
-
-    supplied = "".join(ch for ch in str(last4) if ch.isdigit())
-    expected = "".join(ch for ch in account_ref if ch.isdigit())[-4:]
-
-    verified = bool(supplied) and supplied[-4:] == expected
-    return {"verified": verified, "reason": "" if verified else "digits do not match our records"}
+    policy = _get_policy()
+    t = offer_engine.payment_targets(debt["amount_due"], debt["amount_collected"], policy)
+    total = debt.pop("amount_due")
+    debt["total_balance_DO_NOT_QUOTE"] = total
+    debt["due_today_ASK_FOR_THIS"] = t["due_now"]
+    debt["minimum_acceptable_today"] = t["floor"]
+    debt["guidance"] = (
+        f"Ask for ${t['due_now']:g} today - this cycle's instalment. Do NOT say the total balance "
+        f"of ${t['remaining']:g}. Never accept less than ${t['floor']:g}."
+    )
+    return debt
 
 
 def get_memory(debt_id: str) -> dict:
@@ -89,7 +89,7 @@ def _calls_today(debt_id: str, today: str) -> int:
 
 
 def check_call_allowed(debt_id: str) -> dict:
-    debt = get_debt_profile(debt_id)
+    debt = _debt_row(debt_id)
     if "error" in debt:
         return debt
     if debt["status"] in TERMINAL_STATUSES:
@@ -116,7 +116,7 @@ def check_call_allowed(debt_id: str) -> dict:
 
 
 def generate_offer_options(debt_id: str, borrower_can_pay_today: float | None = None) -> dict:
-    debt = get_debt_profile(debt_id)
+    debt = _debt_row(debt_id)
     if "error" in debt:
         return debt
     policy = _get_policy()
@@ -128,14 +128,20 @@ def generate_offer_options(debt_id: str, borrower_can_pay_today: float | None = 
             is not None
             or bool(debt.get("salary_date"))
         )
-    offers = offer_engine.generate_offer_options(
-        debt["amount_due"], debt["amount_collected"], policy, borrower_can_pay_today, has_income_date
+    # Returns the full picture (due_now, floor, offers, below_floor) rather
+    # than a bare list - the agent needs the floor to know when to stop.
+    return offer_engine.generate_offer_options(
+        debt["amount_due"],
+        debt["amount_collected"],
+        policy,
+        borrower_can_pay_today,
+        has_income_date,
+        today=get_demo_now(),
     )
-    return {"offers": offers}
 
 
 def apply_discount(debt_id: str, requested_pct: float) -> dict:
-    debt = get_debt_profile(debt_id)
+    debt = _debt_row(debt_id)
     if "error" in debt:
         return debt
     policy = _get_policy()
@@ -174,7 +180,7 @@ def record_call_event(
 
 
 def send_sms_payment_link(debt_id: str, amount: float, reason: str = "") -> dict:
-    debt = get_debt_profile(debt_id)
+    debt = _debt_row(debt_id)
     if "error" in debt:
         return debt
 
@@ -200,7 +206,7 @@ def send_sms_payment_link(debt_id: str, amount: float, reason: str = "") -> dict
 
 
 def schedule_sms_reminder(debt_id: str, send_at: str, message_type: str = "reminder") -> dict:
-    debt = get_debt_profile(debt_id)
+    debt = _debt_row(debt_id)
     if "error" in debt:
         return debt
     with get_conn() as conn:
@@ -212,7 +218,7 @@ def schedule_sms_reminder(debt_id: str, send_at: str, message_type: str = "remin
 
 
 def schedule_next_action(debt_id: str, next_action: str, next_action_at: str, reason: str = "") -> dict:
-    debt = get_debt_profile(debt_id)
+    debt = _debt_row(debt_id)
     if "error" in debt:
         return debt
     with get_conn() as conn:
@@ -230,7 +236,7 @@ def update_debt_status(
     next_action: str | None = None,
     next_action_at: str | None = None,
 ) -> dict:
-    debt = get_debt_profile(debt_id)
+    debt = _debt_row(debt_id)
     if "error" in debt:
         return debt
 
@@ -248,7 +254,7 @@ def update_debt_status(
 
     with get_conn() as conn:
         conn.execute(f"UPDATE debts SET {', '.join(fields)} WHERE id = ?", values)
-    return get_debt_profile(debt_id)
+    return _debt_row(debt_id)
 
 
 def write_memory(debt_id: str, key: str, value: str) -> dict:
@@ -282,7 +288,7 @@ def mark_needs_review(debt_id: str, reason: str) -> dict:
 
 
 def mark_paid(debt_id: str, amount: float, sms_id: str | None = None) -> dict:
-    debt = get_debt_profile(debt_id)
+    debt = _debt_row(debt_id)
     if "error" in debt:
         return debt
     amount_collected = round(debt["amount_collected"] + amount, 2)
@@ -309,13 +315,13 @@ def mark_paid(debt_id: str, amount: float, sms_id: str | None = None) -> dict:
                 f"Payment received: ${amount:g}. Thank you.",
             ),
         )
-    return get_debt_profile(debt_id)
+    return _debt_row(debt_id)
 
 
 def send_sms_reminder(debt_id: str) -> dict:
     """Scheduler executor for the 'send_sms_reminder' action - distinct from
     the schedule_sms_reminder agent tool, which only books it."""
-    debt = get_debt_profile(debt_id)
+    debt = _debt_row(debt_id)
     if "error" in debt:
         return debt
 
@@ -348,7 +354,7 @@ def check_payment_status(debt_id: str) -> dict:
     """Scheduler executor placeholder - payment completion is driven by the
     mock /pay page or a simulated-call outcome, not a poll, so this just
     reports current state without side effects."""
-    debt = get_debt_profile(debt_id)
+    debt = _debt_row(debt_id)
     if "error" in debt:
         return debt
     with get_conn() as conn:
@@ -368,7 +374,7 @@ def send_sms_now(debt_id: str, body: str | None = None, sms_type: str = "custom"
     With sms_type="payment_link" a real payment record is minted and its URL
     appended, so the link works in the mock checkout like any other.
     """
-    debt = get_debt_profile(debt_id)
+    debt = _debt_row(debt_id)
     if "error" in debt:
         return debt
     if not debt.get("phone"):
@@ -445,7 +451,7 @@ def get_payment_history(debt_id: str) -> dict:
             "FROM sms_messages WHERE debt_id = ? ORDER BY sent_at",
             (debt_id,),
         ).fetchall()
-    debt = get_debt_profile(debt_id)
+    debt = _debt_row(debt_id)
     if "error" in debt:
         return debt
     return {

@@ -118,7 +118,7 @@ def _assistant_body() -> dict:
 
     return {
         "name": "SettleWise collections agent",
-        "firstMessage": "Hello, this is SettleWise calling about your account. Am I speaking with the account holder?",
+        "firstMessage": "Hello, this is Settle Wise calling about your account. Am I speaking with the account holder?",
         # end-of-call-report carries the transcript and summary; without it a
         # real call leaves no readable record on the borrower's page.
         "server": {"url": f"{config.PUBLIC_BASE_URL}/api/vapi/events"},
@@ -131,10 +131,14 @@ def _assistant_body() -> dict:
         "responseDelaySeconds": 0.2,
         # Realtime models process audio natively, so no transcriber is needed
         # and the voice must be one of OpenAI's own.
-        "voice": {"provider": "openai", "voiceId": config.VAPI_VOICE},
+        "voice": {"provider": config.VAPI_VOICE_PROVIDER, "voiceId": config.VAPI_VOICE},
         "model": {
             "provider": "openai",
             "model": config.VAPI_MODEL,
+            # A backstop for turn length. The prompt asks for one or two
+            # sentences; without a cap the model rambled into long turns
+            # that got cut off mid-word and then restarted.
+            "maxTokens": 150,
             "messages": [
                 {
                     "role": "system",
@@ -149,24 +153,39 @@ def _assistant_body() -> dict:
                     "get_policy, or check_call_allowed at the start of this call. Speak first, "
                     "immediately.\n\n"
                     "IMPORTANT - those pre-loaded facts are for YOUR reference only. Knowing the "
-                    "balance is not permission to say it. Greet them, ask for the borrower by "
-                    "name, then verify identity (below) BEFORE you state the amount or any other "
-                    "account detail.\n\n"
+                    "balance is not permission to say it. The opening line already asked whether "
+                    "you are speaking to the borrower; only once they confirm do you state the "
+                    "amount or any other account detail. Do NOT greet or introduce yourself "
+                    "again - your first turn is the reply to their answer.\n\n"
                     "VOICE RULES (these override the step-by-step flow above):\n"
+                    "- DO NOT MAKE UP DATA. Every amount, date, balance or account fact you say "
+                    "must come from a tool result in this call - never from memory, never from "
+                    "the notes above, never approximated or rounded. If you do not have it from "
+                    "a tool, call the tool or say a colleague will confirm. Never guess.\n"
+                    "- BEFORE you say ANY dollar figure, call generate_offer_options and read "
+                    "due_now back exactly as it returns it. The numbers in the notes above are "
+                    "context, NOT permission to quote from memory - you have already misquoted "
+                    "the amount by doing that. Never round, never approximate, never guess.\n"
+                    "- If they say they cannot pay anything, or refuse to pay, do NOT keep "
+                    "asking for a smaller number and do NOT just offer to call back another "
+                    "day. Tell them a colleague will review the account, call mark_needs_review, "
+                    "and close. Two attempts at an amount is the limit.\n"
+                    "- ONE OR TWO SHORT SENTENCES PER TURN. Then stop and let them speak. "
+                    "Never deliver a paragraph, never chain several points together, never "
+                    "keep talking to fill silence. If you have more to say, say it next turn.\n"
+                    "- Write the company name as 'Settle Wise' (two words) whenever you say it - "
+                    "the voice slurs 'SettleWise' into 'Settilwise'. Say the borrower's name "
+                    "slowly and clearly; if you are unsure how it is pronounced, use it sparingly "
+                    "rather than mangling it.\n"
                     "- SPEAK ENGLISH. You are a speech-to-speech model and will be tempted to "
                     "mirror the caller's language or accent - do not. Reply in English every "
                     "turn, whatever they speak, whatever their name sounds like, even if they "
                     "ask you to switch. Never answer in Hindi or any other language.\n"
-                    "- Verify identity first: ask for the last 4 digits of their account "
-                    "reference. You do NOT know these digits - never guess them, never say the "
-                    "ones on file, never say whether an answer was close. Only after "
-                    "verified: true may you discuss the account.\n"
-                    "- Phone audio garbles digits. If you did not hear them clearly, ask them to "
-                    "repeat, then read back what you heard digit by digit ('four, five, two, "
-                    "zero - is that right?') and wait for them to agree before calling "
-                    "verify_identity. Reading back THEIR answer is fine; it is not a secret. "
-                    "Mishearing does not use up their attempt.\n"
-                    "- Never say 'hold on', 'one moment', or 'let me check'. Dead air ends the call.\n"
+                    "- NEVER announce that you are checking something. No 'hold on', 'one moment', "
+                    "'let me check', 'give me a second'. Saying that and then pausing is the worst "
+                    "failure mode on a phone call - the caller hears dead air and thinks the line "
+                    "dropped. Either answer now from what you already know, or call the tool and "
+                    "speak the moment it returns, with no filler in between.\n"
                     "- Keep every turn to one or two short sentences, then stop and let them reply.\n"
                     "- Only call a tool when you are about to CHANGE something (send a payment "
                     "link, schedule a reminder, record the outcome, write memory, escalate) or "
@@ -203,18 +222,27 @@ def _debt_context(debt_id: str) -> str:
     the results instead."""
     from .agent import tools as agent_tools
 
-    debt = agent_tools.get_debt_profile(debt_id)
+    debt = agent_tools._debt_row(debt_id)
     if "error" in debt:
         return f"(no debt found for {debt_id})"
     policy = agent_tools.get_policy()
     memory = agent_tools.get_memory(debt_id).get("memory", [])
     eligibility = agent_tools.check_call_allowed(debt_id)
 
+    from .offer_engine import payment_targets
+
     remaining = debt["amount_due"] - debt["amount_collected"]
+    targets = payment_targets(debt["amount_due"], debt["amount_collected"], policy)
     lines = [
         f"- Borrower name: {debt['name']}",
         f"- Total owed: ${debt['amount_due']:g} (already collected ${debt['amount_collected']:g}, "
         f"still outstanding ${remaining:g})",
+        # The agent asks for the instalment, not the balance - without these
+        # two figures up front it opens by quoting the full amount.
+        f"- ASK FOR THIS: ${targets['due_now']:g} due today. Say this number, never the total.",
+        f"- If they can't pay it in one go: ${targets['due_now']:g} every {targets['cycle_days']} days, "
+        f"{targets['cycles_to_clear']} payments to clear the balance.",
+        f"- Hard floor ${targets['floor']:g} for this cycle. Below it: do not accept, do not counter, escalate.",
         f"- Due date: {debt['due_date']}, breach date: {debt['breach_date']}",
         f"- Account status: {debt['status']}",
         f"- Salary date on file: {debt['salary_date'] or 'unknown'}",
@@ -239,8 +267,18 @@ def place_call(to_number: str, debt_id: str | None = None) -> dict:
     if debt_id:
         # Sent via variableValues rather than a model override - Vapi rejects a
         # partial model object, and the assistant prompt references these.
+        from .agent import tools as agent_tools
+
+        debt = agent_tools.get_debt_profile(debt_id)
+        name = debt.get("name") or "the account holder"
         payload["assistantOverrides"] = {
-            "variableValues": {"debt_id": debt_id, "debt_context": _debt_context(debt_id)}
+            "variableValues": {"debt_id": debt_id, "debt_context": _debt_context(debt_id)},
+            # Built here rather than via a {{variable}} in the assistant's
+            # firstMessage - Vapi resolved that to an empty string, so callers
+            # heard "Am I speaking with?" with the name missing.
+            "firstMessage": (
+                f"Hello, this is Settle Wise calling about your account. Am I speaking with {name}?"
+            ),
         }
         payload["metadata"] = {"debt_id": debt_id}
     return _post("/call", payload)

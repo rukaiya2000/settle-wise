@@ -55,7 +55,7 @@ def get_debt_detail(debt_id: str):
 @router.get("/api/debts/{debt_id}/progress")
 def get_debt_progress(debt_id: str):
     """Key measures for the person progress page (md/dashboard-spec.md)."""
-    debt = agent_tools.get_debt_profile(debt_id)
+    debt = agent_tools._debt_row(debt_id)
     if "error" in debt:
         raise HTTPException(404, "not found")
     with get_conn() as conn:
