@@ -1,5 +1,7 @@
 # SettleWise
 
+**Demo:** [Watch the video](https://drive.google.com/file/d/1FQK06LwnZG5tMHFDqMI4hNMuSOa1bFVM/view?usp=sharing)
+
 An AI collections agent that phones borrowers, negotiates a repayment inside
 policy limits, and turns the agreement into a payment — built as a hackathon
 demo.
