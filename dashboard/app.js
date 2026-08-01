@@ -252,10 +252,12 @@ async function loadProgress(debtId) {
   document.querySelector("#smsHistory").innerHTML = sms.length
     ? sms
         .map((s) => {
-          const link =
-            s.payment_id && s.payment_status !== "paid"
-              ? `<div><a href="/pay/${s.payment_id}" target="_blank">Open payment link &rarr;</a></div>`
-              : "";
+          let link = "";
+          if (s.payment_id && s.payment_status !== "paid") {
+            link = `<div class="pay-open"><button data-pay="${s.payment_id}" data-amount="${s.amount || 0}">Open payment link</button></div>`;
+          } else if (s.payment_id) {
+            link = `<div class="paid-tag">&check; Paid</div>`;
+          }
           return feedItem(
             s.type.replace(/_/g, " "),
             `${formatClock(s.sent_at)} · ${s.payment_status}${s.amount ? " · " + money(s.amount) : ""}`,
@@ -555,6 +557,78 @@ document.querySelector("#resetDemo").addEventListener("click", async () => {
   window.location.hash = "";
   await loadClock();
   await route();
+});
+
+// ---- Checkout modal --------------------------------------------------
+//
+// The same POST the borrower's phone hits (/pay/:id/complete), so paying from
+// the dashboard and paying from the SMS link go through one code path and one
+// double-tap guard. Kept in-page so the money visibly lands on the progress
+// bar behind the modal instead of in a tab nobody is looking at.
+
+const payOverlay = document.querySelector("#payOverlay");
+const payBody = document.querySelector("#payBody");
+
+function closePayModal() {
+  payOverlay.classList.add("hidden");
+  payBody.innerHTML = "";
+}
+
+function openPayModal(paymentId, amount) {
+  const name = document.querySelector("#progName").textContent || "this account";
+  payBody.innerHTML = `
+    <div class="pay-brand">SettleWise</div>
+    <div class="pay-sub">Secure payment</div>
+    <div class="pay-amount-label">Amount due today</div>
+    <div class="pay-amount">${money(amount)}</div>
+    <div class="pay-rows">
+      <div class="pay-row"><span>Account</span><span>${name}</span></div>
+      <div class="pay-row"><span>Reference</span><span>${paymentId}</span></div>
+    </div>
+    <button class="pay-submit" id="paySubmit">Pay ${money(amount)}</button>
+    <div class="pay-note">Demo checkout. No real payment is taken and no card
+    details are collected.</div>`;
+  payOverlay.classList.remove("hidden");
+
+  document.querySelector("#paySubmit").addEventListener("click", async (e) => {
+    const btn = e.target;
+    btn.disabled = true;
+    btn.textContent = "Processing...";
+    const existingError = payBody.querySelector(".pay-error");
+    if (existingError) existingError.remove();
+    try {
+      await api(`/pay/${paymentId}/complete`, { method: "POST" });
+      payBody.innerHTML = `
+        <div class="pay-done">
+          <div class="pay-tick">&check;</div>
+          <h3>Payment received</h3>
+          <div class="pay-sub">${money(amount)} paid. Thank you, ${name}.</div>
+          <button class="pay-submit" id="payDone">Done</button>
+        </div>`;
+      // Refresh underneath first, so closing reveals the new balance rather
+      // than the old one flashing to the new one.
+      const debtId = window.location.hash.replace(/^#\/?/, "");
+      if (debtId) await loadProgress(debtId);
+      document.querySelector("#payDone").addEventListener("click", closePayModal);
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = `Pay ${money(amount)}`;
+      btn.insertAdjacentHTML("afterend", `<div class="pay-error">Payment failed: ${err.message}</div>`);
+    }
+  });
+}
+
+document.querySelector("#smsHistory").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-pay]");
+  if (btn) openPayModal(btn.dataset.pay, Number(btn.dataset.amount));
+});
+
+document.querySelector("#payClose").addEventListener("click", closePayModal);
+payOverlay.addEventListener("click", (e) => {
+  if (e.target === payOverlay) closePayModal();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !payOverlay.classList.contains("hidden")) closePayModal();
 });
 
 window.addEventListener("hashchange", route);

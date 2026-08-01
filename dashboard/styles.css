@@ -489,3 +489,114 @@ button.ghost {
 
 /* Nothing to show in the actions column - let the transcript use the space. */
 .split.single { grid-template-columns: 1fr; }
+
+/* ---- Checkout modal ------------------------------------------------- */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 24, 31, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 50;
+}
+
+.overlay.hidden { display: none; }
+
+.pay-modal {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px 24px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 18px 48px rgba(18, 24, 31, 0.22);
+  animation: pay-in 0.16s ease-out;
+}
+
+@keyframes pay-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.overlay-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--subtle);
+}
+
+.overlay-close:hover { background: #eef1f4; color: var(--text); }
+
+.pay-brand { font-weight: 700; font-size: 17px; letter-spacing: -0.02em; }
+.pay-sub { color: var(--subtle); font-size: 13px; margin-bottom: 20px; }
+
+.pay-amount-label {
+  font-size: 11px;
+  color: var(--subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+
+.pay-amount { font-size: 38px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+
+.pay-rows { border-top: 1px solid var(--border); margin: 20px 0; padding-top: 12px; }
+
+.pay-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.pay-row span:first-child { color: var(--subtle); }
+
+.pay-modal button.pay-submit { width: 100%; padding: 13px; font-size: 15px; }
+
+.pay-note {
+  font-size: 11px;
+  color: var(--subtle);
+  text-align: center;
+  margin-top: 12px;
+  line-height: 1.5;
+}
+
+.pay-error {
+  background: var(--red-bg);
+  color: var(--red);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.pay-done { text-align: center; }
+
+.pay-tick {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--green-bg);
+  color: var(--green);
+  font-size: 28px;
+  line-height: 54px;
+  margin: 0 auto 12px;
+}
+
+.pay-done h3 { margin: 0 0 6px; font-size: 19px; }
+
+/* The payment link in the SMS feed - a button, not a link out of the app. */
+.pay-open { margin-top: 6px; }
+.pay-open button { padding: 6px 12px; font-size: 12px; }
+.paid-tag { color: var(--green); font-size: 12px; font-weight: 600; margin-top: 6px; }

@@ -73,6 +73,14 @@ def seed():
                 VALUES (?, ?, ?, ?, ?)""",
                 (m["id"], m["debt_id"], m["key"], m["value"], m["learned_at"]),
             )
+        for a in data.get("agent_actions", []):
+            conn.execute(
+                """INSERT OR REPLACE INTO agent_actions
+                (id, debt_id, tool, arguments, result, source, at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (a["id"], a["debt_id"], a["tool"], a.get("arguments"), a.get("result"),
+                 a.get("source", "voice"), a["at"]),
+            )
         if "demo_clock" in data:
             dc = data["demo_clock"]
             conn.execute(

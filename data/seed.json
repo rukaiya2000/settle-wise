@@ -6,15 +6,15 @@
       "account_ref": "SW-2041-7318",
       "phone": "+14152863436",
       "amount_due": 10000,
-      "amount_collected": 0,
+      "amount_collected": 10000,
       "amount_promised": 0,
       "due_date": "2026-08-30",
       "breach_date": "2026-08-30",
-      "status": "new",
-      "salary_date": "",
-      "last_call_summary": "",
-      "next_action_at": "2026-07-31T09:00:00",
-      "next_action": "call_borrower"
+      "status": "paid",
+      "salary_date": "28th of every month",
+      "last_call_summary": "Paid the balance in full after agreeing a part payment on the 26th.",
+      "next_action_at": null,
+      "next_action": null
     },
     {
       "id": "debt_002",
@@ -33,12 +33,240 @@
       "next_action": "call_borrower"
     }
   ],
-  "calls": [],
-  "sms_messages": [],
-  "memory": [],
+  "calls": [
+    {
+      "id": "call_sh01",
+      "debt_id": "debt_001",
+      "started_at": "2026-07-26T09:00:00",
+      "outcome": "no_answer",
+      "transcript": "",
+      "summary": "No answer. Retry scheduled for the afternoon.",
+      "amount_promised": null,
+      "promise_date": null
+    },
+    {
+      "id": "call_sh02",
+      "debt_id": "debt_001",
+      "started_at": "2026-07-26T14:02:00",
+      "outcome": "promised",
+      "transcript": "AI: Hello, this is Settle Wise calling about your account. Am I speaking with Shahul?\nUser: Yes, speaking.\nAI: Thank you. This is about an outstanding balance on your account, and it may be recorded. One thousand dollars is due today. Are you able to take care of that now?\nUser: Not the full amount, no. Things are tight until payday.\nAI: I understand. What could you manage today?\nUser: Maybe six hundred.\nAI: Six hundred works. I'll text you a secure link now, and we can look at the rest after payday.\nUser: That's fine. I get paid on the 28th.\nAI: Noted, thank you. The link is on its way. Thanks for your time, and have a great day.",
+      "summary": "Could not pay the full $1,000. Agreed $600 today, remainder after payday on the 28th.",
+      "amount_promised": 1000,
+      "promise_date": "2026-07-28"
+    },
+    {
+      "id": "call_sh03",
+      "debt_id": "debt_001",
+      "started_at": "2026-07-28T10:30:00",
+      "outcome": "paid",
+      "transcript": "AI: Hello, this is Settle Wise calling about your account. Am I speaking with Shahul?\nUser: Yes. I've been paid, I can clear the rest now.\nAI: That's great to hear. I'll send a link for the remaining balance.\nUser: Send it over.\nAI: Done. Thank you for sorting this out, and have a great day.",
+      "summary": "Borrower cleared the remaining balance in full after payday.",
+      "amount_promised": 0,
+      "promise_date": null
+    }
+  ],
+  "sms_messages": [
+    {
+      "id": "sms_sh01",
+      "debt_id": "debt_001",
+      "payment_id": "pay_sh01",
+      "sent_at": "2026-07-26T14:05:00",
+      "type": "payment_link",
+      "amount": 600,
+      "body": "Pay $600 here: /pay/pay_sh01",
+      "payment_link": "/pay/pay_sh01",
+      "payment_status": "paid"
+    },
+    {
+      "id": "sms_sh02",
+      "debt_id": "debt_001",
+      "payment_id": null,
+      "sent_at": "2026-07-26T14:22:00",
+      "type": "confirmation",
+      "amount": 600,
+      "body": "Payment received: $600. Thank you.",
+      "payment_link": null,
+      "payment_status": "paid"
+    },
+    {
+      "id": "sms_sh03",
+      "debt_id": "debt_001",
+      "payment_id": null,
+      "sent_at": "2026-07-28T09:00:00",
+      "type": "reminder",
+      "amount": 9400,
+      "body": "Reminder: $9400 is outstanding on your account.",
+      "payment_link": null,
+      "payment_status": "sent"
+    },
+    {
+      "id": "sms_sh04",
+      "debt_id": "debt_001",
+      "payment_id": "pay_sh02",
+      "sent_at": "2026-07-28T10:33:00",
+      "type": "payment_link",
+      "amount": 9400,
+      "body": "Pay $9400 here: /pay/pay_sh02",
+      "payment_link": "/pay/pay_sh02",
+      "payment_status": "paid"
+    },
+    {
+      "id": "sms_sh05",
+      "debt_id": "debt_001",
+      "payment_id": null,
+      "sent_at": "2026-07-28T10:41:00",
+      "type": "confirmation",
+      "amount": 9400,
+      "body": "Payment received: $9400. Your balance is now clear. Thank you.",
+      "payment_link": null,
+      "payment_status": "paid"
+    }
+  ],
+  "memory": [
+    {
+      "id": "mem_sh01",
+      "debt_id": "debt_001",
+      "key": "salary_date",
+      "value": "28th of every month",
+      "learned_at": "2026-07-26T14:03:00"
+    },
+    {
+      "id": "mem_sh02",
+      "debt_id": "debt_001",
+      "key": "best_call_time",
+      "value": "Afternoons - did not answer at 9am, answered at 2pm",
+      "learned_at": "2026-07-26T14:02:00"
+    },
+    {
+      "id": "mem_sh03",
+      "debt_id": "debt_001",
+      "key": "last_promise",
+      "value": "$600 on the 26th, remainder after payday - kept in full",
+      "learned_at": "2026-07-28T10:35:00"
+    }
+  ],
   "demo_clock": {
     "current_time": "2026-07-31T09:00:00",
     "timezone": "America/Los_Angeles",
     "speed": "paused"
-  }
+  },
+  "agent_actions": [
+    {
+      "id": "act_sh01",
+      "debt_id": "debt_001",
+      "tool": "get_debt_profile",
+      "arguments": "{\"debt_id\": \"debt_001\"}",
+      "result": "{\"name\": \"Shahul\", \"status\": \"new\", \"due_today_ASK_FOR_THIS\": 1000}",
+      "source": "voice",
+      "at": "2026-07-26T14:02:10"
+    },
+    {
+      "id": "act_sh02",
+      "debt_id": "debt_001",
+      "tool": "get_memory",
+      "arguments": "{\"debt_id\": \"debt_001\"}",
+      "result": "{\"memory\": []}",
+      "source": "voice",
+      "at": "2026-07-26T14:02:12"
+    },
+    {
+      "id": "act_sh03",
+      "debt_id": "debt_001",
+      "tool": "check_call_allowed",
+      "arguments": "{\"debt_id\": \"debt_001\"}",
+      "result": "{\"allowed\": true, \"reason\": \"Within synthetic call window\"}",
+      "source": "voice",
+      "at": "2026-07-26T14:02:14"
+    },
+    {
+      "id": "act_sh04",
+      "debt_id": "debt_001",
+      "tool": "generate_offer_options",
+      "arguments": "{\"debt_id\": \"debt_001\"}",
+      "result": "{\"due_now\": 1000, \"minimum_acceptable_today\": 500, \"offers\": [{\"type\": \"due_now\", \"amount\": 1000}]}",
+      "source": "voice",
+      "at": "2026-07-26T14:02:40"
+    },
+    {
+      "id": "act_sh05",
+      "debt_id": "debt_001",
+      "tool": "generate_offer_options",
+      "arguments": "{\"debt_id\": \"debt_001\", \"borrower_can_pay_today\": 600}",
+      "result": "{\"due_now\": 1000, \"minimum_acceptable_today\": 500, \"below_floor\": false, \"offers\": [{\"type\": \"partial\", \"amount_today\": 600}]}",
+      "source": "voice",
+      "at": "2026-07-26T14:03:30"
+    },
+    {
+      "id": "act_sh06",
+      "debt_id": "debt_001",
+      "tool": "send_sms_payment_link",
+      "arguments": "{\"debt_id\": \"debt_001\", \"amount\": 600, \"reason\": \"partial agreed\"}",
+      "result": "{\"payment_id\": \"pay_sh01\", \"payment_link\": \"/pay/pay_sh01\", \"sent_live\": true}",
+      "source": "voice",
+      "at": "2026-07-26T14:05:00"
+    },
+    {
+      "id": "act_sh07",
+      "debt_id": "debt_001",
+      "tool": "write_memory",
+      "arguments": "{\"debt_id\": \"debt_001\", \"key\": \"salary_date\", \"value\": \"28th of every month\"}",
+      "result": "{\"key\": \"salary_date\"}",
+      "source": "voice",
+      "at": "2026-07-26T14:05:20"
+    },
+    {
+      "id": "act_sh08",
+      "debt_id": "debt_001",
+      "tool": "record_call_event",
+      "arguments": "{\"debt_id\": \"debt_001\", \"outcome\": \"promised\", \"summary\": \"Agreed $600 today, remainder after payday.\", \"amount_promised\": 1000}",
+      "result": "{\"call_id\": \"call_sh02\", \"outcome\": \"promised\"}",
+      "source": "voice",
+      "at": "2026-07-26T14:06:00"
+    },
+    {
+      "id": "act_sh09",
+      "debt_id": "debt_001",
+      "tool": "schedule_sms_reminder",
+      "arguments": "{\"debt_id\": \"debt_001\", \"send_at\": \"2026-07-28T09:00:00\"}",
+      "result": "{\"next_action\": \"send_sms_reminder\"}",
+      "source": "voice",
+      "at": "2026-07-26T14:06:20"
+    },
+    {
+      "id": "act_sh10",
+      "debt_id": "debt_001",
+      "tool": "get_payment_history",
+      "arguments": "{\"debt_id\": \"debt_001\"}",
+      "result": "{\"amount_collected\": 600, \"outstanding\": 9400}",
+      "source": "voice",
+      "at": "2026-07-28T10:30:20"
+    },
+    {
+      "id": "act_sh11",
+      "debt_id": "debt_001",
+      "tool": "send_sms_payment_link",
+      "arguments": "{\"debt_id\": \"debt_001\", \"amount\": 9400, \"reason\": \"clear balance\"}",
+      "result": "{\"payment_id\": \"pay_sh02\", \"payment_link\": \"/pay/pay_sh02\", \"sent_live\": true}",
+      "source": "voice",
+      "at": "2026-07-28T10:33:00"
+    },
+    {
+      "id": "act_sh12",
+      "debt_id": "debt_001",
+      "tool": "record_call_event",
+      "arguments": "{\"debt_id\": \"debt_001\", \"outcome\": \"paid\", \"summary\": \"Balance cleared in full.\"}",
+      "result": "{\"call_id\": \"call_sh03\", \"outcome\": \"paid\"}",
+      "source": "voice",
+      "at": "2026-07-28T10:36:00"
+    },
+    {
+      "id": "act_sh13",
+      "debt_id": "debt_001",
+      "tool": "update_debt_status",
+      "arguments": "{\"debt_id\": \"debt_001\", \"status\": \"paid\"}",
+      "result": "{\"status\": \"paid\"}",
+      "source": "voice",
+      "at": "2026-07-28T10:41:00"
+    }
+  ]
 }
