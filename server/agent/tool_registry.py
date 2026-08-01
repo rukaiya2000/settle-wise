@@ -6,6 +6,8 @@ replay, a text test, and a real phone call all call the exact same
 functions in server/agent/tools.py.
 """
 
+import functools
+
 from . import tools as agent_tools
 
 TOOL_DEFS = [
@@ -56,7 +58,7 @@ TOOL_DEFS = [
             "ask for this, NOT the whole balance), minimum_acceptable_today (a hard floor), and "
             "below_floor. If below_floor is true the offer list is empty: do not accept, do not "
             "counter, stop negotiating and call mark_needs_review. Pass borrower_can_pay_today "
-            "whenever they name an amount."
+            "ONLY when they name a specific figure. Saying 'no' or 'I can't manage that' is NOT an offer of zero - leave the field out, ask what they CAN pay, then call again with their answer."
         ),
         "properties": {
             "debt_id": {"type": "string"},
@@ -104,7 +106,7 @@ TOOL_DEFS = [
             "reason": {"type": "string"},
         },
         "required": ["debt_id", "amount"],
-        "fn": agent_tools.send_sms_payment_link,
+        "fn": functools.partial(agent_tools.send_sms_payment_link, live=True),
     },
     {
         "name": "send_sms",

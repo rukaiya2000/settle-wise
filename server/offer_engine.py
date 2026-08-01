@@ -53,7 +53,12 @@ def generate_offer_options(
     t = payment_targets(amount_due, amount_collected, policy)
     remaining, due_now, floor, cycle_days = t["remaining"], t["due_now"], t["floor"], t["cycle_days"]
 
-    below_floor = borrower_can_pay_today is not None and borrower_can_pay_today < floor
+    # A borrower declining the full amount is NOT an offer of zero. The agent
+    # was passing 0 when they simply said "no", which tripped the floor and
+    # skipped negotiation entirely. Treat 0/None as "no figure named yet" and
+    # ask them; a genuine refusal is handled by mark_needs_review, not here.
+    named_amount = borrower_can_pay_today is not None and borrower_can_pay_today > 0
+    below_floor = named_amount and borrower_can_pay_today < floor
 
     offers = []
     if not below_floor:
@@ -64,7 +69,7 @@ def generate_offer_options(
                 "note": "due today - ask for this. Payment is expected today, not spread over weeks.",
             }
         )
-        if borrower_can_pay_today is not None and borrower_can_pay_today < due_now:
+        if named_amount and borrower_can_pay_today < due_now:
             # At or above the floor but short of the cycle amount: take it and
             # carry the shortfall into this cycle.
             amount_today = round(borrower_can_pay_today, 2)
@@ -100,10 +105,14 @@ def generate_offer_options(
             "call and escalate with mark_needs_review."
             if below_floor
             else (
-                f"Payment is due TODAY. Ask for {due_now:g}. If they push back, negotiate down "
-                f"within the band but NEVER below {floor:g} - that is a hard floor, not an opening "
-                f"position. Do not offer to spread this over days or weeks. If they cannot pay "
-                f"anything at all, stop and escalate with mark_needs_review."
+                f"They have not named an amount yet. Do NOT assume zero and do NOT escalate. Ask "
+                f"them what they CAN pay today, then call this tool again with that figure. "
+                f"Anything from {floor:g} up to {due_now:g} is acceptable."
+                if not named_amount
+                else (
+                    f"They can pay {borrower_can_pay_today:g}, which is acceptable. Confirm it and "
+                    f"send the payment link. Never accept less than {floor:g}."
+                )
             )
         ),
     }

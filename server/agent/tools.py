@@ -179,7 +179,15 @@ def record_call_event(
     return {"call_id": call_id, "debt_id": debt_id, "outcome": outcome}
 
 
-def send_sms_payment_link(debt_id: str, amount: float, reason: str = "") -> dict:
+def send_sms_payment_link(debt_id: str, amount: float, reason: str = "", live: bool | None = None) -> dict:
+    """Create a payment link and text it.
+
+    `live` decides whether a real SMS goes out. The agent calls this during
+    an actual conversation and passes live=True - a borrower who has just
+    agreed to pay must actually receive the link. The simulator and the
+    demo-clock scheduler leave it None, falling back to A1MOBILE_LIVE_SMS,
+    so replaying 30 days of activity never texts anyone.
+    """
     debt = _debt_row(debt_id)
     if "error" in debt:
         return debt
@@ -197,8 +205,9 @@ def send_sms_payment_link(debt_id: str, amount: float, reason: str = "") -> dict
             (sms_id, debt_id, payment_id, _now_iso(), amount, body, link_path),
         )
 
+    should_send = config.A1MOBILE_LIVE_SMS if live is None else live
     sent_live = False
-    if config.A1MOBILE_LIVE_SMS:
+    if should_send:
         a1mobile_client.send_sms(to=debt["phone"], body=body)
         sent_live = True
 
