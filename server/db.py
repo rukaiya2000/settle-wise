@@ -23,7 +23,13 @@ CREATE TABLE IF NOT EXISTS debts (
     salary_date TEXT,
     last_call_summary TEXT DEFAULT '',
     next_action_at TEXT,
-    next_action TEXT DEFAULT 'call_borrower'
+    next_action TEXT DEFAULT 'call_borrower',
+    -- Per-customer repayment terms. NULL means "use the policies row"
+    -- (see server/agent/tools.py:effective_policy) - these only exist to
+    -- override the default for a specific borrower.
+    due_now_percent_override REAL,
+    min_payment_today_percent_override REAL,
+    cycle_days_override INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS calls (
@@ -107,6 +113,12 @@ def _migrate(conn):
     existing = {r[1] for r in conn.execute("PRAGMA table_info(debts)")}
     if "account_ref" not in existing:
         conn.execute("ALTER TABLE debts ADD COLUMN account_ref TEXT")
+    if "due_now_percent_override" not in existing:
+        conn.execute("ALTER TABLE debts ADD COLUMN due_now_percent_override REAL")
+    if "min_payment_today_percent_override" not in existing:
+        conn.execute("ALTER TABLE debts ADD COLUMN min_payment_today_percent_override REAL")
+    if "cycle_days_override" not in existing:
+        conn.execute("ALTER TABLE debts ADD COLUMN cycle_days_override INTEGER")
 
     pol = {r[1] for r in conn.execute("PRAGMA table_info(policies)")}
     if "due_now_percent" not in pol:

@@ -23,9 +23,9 @@
 1. Start outbound voice call.
 2. Confirm borrower is available to talk.
 3. Confirm identity if debt details are needed.
-4. Discuss amount due and due date.
-5. Ask for full payment.
-6. Negotiate approved alternative.
+4. Discuss the amount due this cycle - 10% of the outstanding balance (`due_now`) - and due date.
+5. Ask for that amount today.
+6. Negotiate downward if needed, but never below 5% of the outstanding balance.
 7. Generate SMS payment link.
 8. Send the link by SMS during or immediately after the call.
 9. Schedule SMS reminder if payment is not completed.
@@ -37,7 +37,7 @@
 3. Agent confirms details in writing.
 4. Scheduler creates reminder before promise date.
 5. System monitors payment completion.
-6. If payment is missed, set status to `missed` and schedule `call_borrower`.
+6. If payment is missed, keep status `promised` and schedule `call_borrower` for a retry (the reminder sender sets `next_action_at` to that evening - there is no separate `missed` status in the current implementation).
 
 ## Dispute Handling
 

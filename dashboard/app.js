@@ -6,6 +6,20 @@ const money = (value) =>
 let debts = [];
 let demoClock = null;
 
+// Mirrors server/routes/dashboard.py:_validate_repayment_terms so bad input
+// never round-trips to the server just to bounce back.
+function validateRepaymentFields(dueNowPct, floorPct, cycleDays) {
+  if (dueNowPct != null && !(dueNowPct > 0 && dueNowPct <= 100)) return "Repayment % must be between 0 and 100.";
+  if (floorPct != null && !(floorPct > 0 && floorPct <= 100)) return "Floor % must be between 0 and 100.";
+  if (dueNowPct != null && floorPct != null && floorPct > dueNowPct) return "Floor % cannot exceed repayment %.";
+  if (cycleDays != null && !(cycleDays > 0)) return "Cycle days must be a positive number.";
+  return null;
+}
+
+function emptyToNull(value) {
+  return value === "" || value === undefined ? null : value;
+}
+
 async function api(path, options) {
   const res = await fetch(path, {
     ...options,
@@ -170,6 +184,27 @@ function feedItem(title, meta, body) {
   return `<div class="feed-item"><div class="feed-title">${title}</div><div class="feed-meta">${meta}</div>${body || ""}</div>`;
 }
 
+// Per-customer repayment overrides (server/agent/tools.py:effective_policy) -
+// null means this borrower falls back to the global policy default.
+function renderRepaymentSettings(debt) {
+  const rows = [
+    ["Repayment % / cycle", debt.due_now_percent_override, "%"],
+    ["Floor %", debt.min_payment_today_percent_override, "%"],
+    ["Cycle length", debt.cycle_days_override, " days"],
+  ];
+  document.querySelector("#repaymentView").innerHTML = rows
+    .map(([label, value, unit]) => {
+      const custom = value !== null && value !== undefined;
+      const shown = custom ? `${value}${unit}` : "Policy default";
+      return `<div><span class="term-label">${label}:</span> <span class="term-value${custom ? " custom" : ""}">${shown}</span></div>`;
+    })
+    .join("");
+
+  document.querySelector("#rpDueNowPct").value = debt.due_now_percent_override ?? "";
+  document.querySelector("#rpFloorPct").value = debt.min_payment_today_percent_override ?? "";
+  document.querySelector("#rpCycleDays").value = debt.cycle_days_override ?? "";
+}
+
 async function loadProgress(debtId) {
   const [detail, progress] = await Promise.all([
     api(`/api/debts/${debtId}`),
@@ -214,6 +249,8 @@ async function loadProgress(debtId) {
   document.querySelector("#progFacts").innerHTML = facts
     .map(([k, v]) => `<div class="fact"><dt>${k}</dt><dd>${v}</dd></div>`)
     .join("");
+
+  renderRepaymentSettings(d);
 
   const cards = [
     { label: "Outstanding", value: money(progress.amount_due - progress.amount_collected) },
@@ -627,8 +664,140 @@ document.querySelector("#payClose").addEventListener("click", closePayModal);
 payOverlay.addEventListener("click", (e) => {
   if (e.target === payOverlay) closePayModal();
 });
+
+// ---- Edit repayment terms (person progress page) ---------------------
+
+document.querySelector("#repaymentEditToggle").addEventListener("click", () => {
+  document.querySelector("#repaymentForm").classList.remove("hidden");
+  document.querySelector("#repaymentEditToggle").classList.add("hidden");
+});
+
+document.querySelector("#repaymentCancel").addEventListener("click", () => {
+  document.querySelector("#repaymentForm").classList.add("hidden");
+  document.querySelector("#repaymentEditToggle").classList.remove("hidden");
+  document.querySelector("#repaymentError").classList.add("hidden");
+});
+
+document.querySelector("#repaymentForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const debtId = window.location.hash.replace(/^#\/?/, "");
+  const errorEl = document.querySelector("#repaymentError");
+  errorEl.classList.add("hidden");
+
+  const dueNowPct = emptyToNull(document.querySelector("#rpDueNowPct").value);
+  const floorPct = emptyToNull(document.querySelector("#rpFloorPct").value);
+  const cycleDays = emptyToNull(document.querySelector("#rpCycleDays").value);
+  const body = {
+    due_now_percent: dueNowPct === null ? null : Number(dueNowPct),
+    min_payment_today_percent: floorPct === null ? null : Number(floorPct),
+    cycle_days: cycleDays === null ? null : Number(cycleDays),
+  };
+
+  const validationError = validateRepaymentFields(body.due_now_percent, body.min_payment_today_percent, body.cycle_days);
+  if (validationError) {
+    errorEl.textContent = validationError;
+    errorEl.classList.remove("hidden");
+    return;
+  }
+
+  const button = document.querySelector("#repaymentSave");
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = "Saving...";
+  try {
+    await api(`/api/debts/${debtId}/update`, { method: "POST", body: JSON.stringify(body) });
+    document.querySelector("#repaymentForm").classList.add("hidden");
+    document.querySelector("#repaymentEditToggle").classList.remove("hidden");
+    await loadProgress(debtId);
+  } catch (err) {
+    errorEl.textContent = `Save failed: ${err.message}`;
+    errorEl.classList.remove("hidden");
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+  }
+});
+
+// ---- Add customer modal -----------------------------------------------
+
+const addCustomerOverlay = document.querySelector("#addCustomerOverlay");
+const addCustomerForm = document.querySelector("#addCustomerForm");
+const addCustomerError = document.querySelector("#addCustomerError");
+
+function openAddCustomerModal() {
+  addCustomerForm.reset();
+  addCustomerError.classList.add("hidden");
+  addCustomerOverlay.classList.remove("hidden");
+  document.querySelector("#acName").focus();
+}
+
+function closeAddCustomerModal() {
+  addCustomerOverlay.classList.add("hidden");
+}
+
+document.querySelector("#addCustomerButton").addEventListener("click", openAddCustomerModal);
+document.querySelector("#addCustomerClose").addEventListener("click", closeAddCustomerModal);
+addCustomerOverlay.addEventListener("click", (e) => {
+  if (e.target === addCustomerOverlay) closeAddCustomerModal();
+});
+
+addCustomerForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  addCustomerError.classList.add("hidden");
+
+  const dueNowPct = emptyToNull(document.querySelector("#acDueNowPct").value);
+  const floorPct = emptyToNull(document.querySelector("#acFloorPct").value);
+  const cycleDays = emptyToNull(document.querySelector("#acCycleDays").value);
+  const body = {
+    name: document.querySelector("#acName").value.trim(),
+    phone: document.querySelector("#acPhone").value.trim(),
+    amount_due: Number(document.querySelector("#acAmount").value),
+    due_date: emptyToNull(document.querySelector("#acDueDate").value),
+    breach_date: emptyToNull(document.querySelector("#acBreachDate").value),
+    salary_date: emptyToNull(document.querySelector("#acSalaryDate").value),
+    due_now_percent: dueNowPct === null ? null : Number(dueNowPct),
+    min_payment_today_percent: floorPct === null ? null : Number(floorPct),
+    cycle_days: cycleDays === null ? null : Number(cycleDays),
+  };
+
+  if (!body.name || !body.phone) {
+    addCustomerError.textContent = "Name and phone are required.";
+    addCustomerError.classList.remove("hidden");
+    return;
+  }
+  if (!(body.amount_due > 0)) {
+    addCustomerError.textContent = "Amount due must be positive.";
+    addCustomerError.classList.remove("hidden");
+    return;
+  }
+  const validationError = validateRepaymentFields(body.due_now_percent, body.min_payment_today_percent, body.cycle_days);
+  if (validationError) {
+    addCustomerError.textContent = validationError;
+    addCustomerError.classList.remove("hidden");
+    return;
+  }
+
+  const button = document.querySelector("#addCustomerSubmit");
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = "Adding...";
+  try {
+    await api("/api/debts", { method: "POST", body: JSON.stringify(body) });
+    closeAddCustomerModal();
+    await loadDebts();
+  } catch (err) {
+    addCustomerError.textContent = `Failed to add customer: ${err.message}`;
+    addCustomerError.classList.remove("hidden");
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+  }
+});
+
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !payOverlay.classList.contains("hidden")) closePayModal();
+  if (e.key !== "Escape") return;
+  if (!payOverlay.classList.contains("hidden")) closePayModal();
+  if (!addCustomerOverlay.classList.contains("hidden")) closeAddCustomerModal();
 });
 
 window.addEventListener("hashchange", route);

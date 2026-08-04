@@ -1,6 +1,9 @@
 """Dashboard API backing the profiles/progress screens (md/dashboard-spec.md)."""
 
+import uuid
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException
+from pydantic import BaseModel
 
 from ..agent import tools as agent_tools
 from ..agent.simulated_call import run_simulated_call
@@ -12,11 +15,69 @@ from ..vapi_setup import place_call
 router = APIRouter()
 
 
+class DebtCreateRequest(BaseModel):
+    name: str
+    phone: str
+    amount_due: float
+    due_date: str | None = None
+    breach_date: str | None = None
+    salary_date: str | None = None
+    due_now_percent: float | None = None
+    min_payment_today_percent: float | None = None
+    cycle_days: int | None = None
+
+
+class DebtUpdateRequest(BaseModel):
+    due_now_percent: float | None = None
+    min_payment_today_percent: float | None = None
+    cycle_days: int | None = None
+
+
+def _validate_repayment_terms(due_now_percent: float | None, min_payment_today_percent: float | None, cycle_days: int | None):
+    """Shared validation for create/update - keeps a customer's per-cycle
+    terms sane regardless of which endpoint set them."""
+    if due_now_percent is not None and not (0 < due_now_percent <= 100):
+        raise HTTPException(400, "due_now_percent must be between 0 and 100")
+    if min_payment_today_percent is not None and not (0 < min_payment_today_percent <= 100):
+        raise HTTPException(400, "min_payment_today_percent must be between 0 and 100")
+    if (
+        due_now_percent is not None
+        and min_payment_today_percent is not None
+        and min_payment_today_percent > due_now_percent
+    ):
+        raise HTTPException(400, "min_payment_today_percent cannot exceed due_now_percent")
+    if cycle_days is not None and cycle_days <= 0:
+        raise HTTPException(400, "cycle_days must be a positive integer")
+
+
 @router.get("/api/debts")
 def list_debts():
     with get_conn() as conn:
         rows = conn.execute("SELECT * FROM debts ORDER BY breach_date").fetchall()
     return [dict(r) for r in rows]
+
+
+@router.post("/api/debts")
+def create_debt(req: DebtCreateRequest):
+    if req.amount_due <= 0:
+        raise HTTPException(400, "amount_due must be positive")
+    _validate_repayment_terms(req.due_now_percent, req.min_payment_today_percent, req.cycle_days)
+
+    debt_id = f"debt_{uuid.uuid4().hex[:8]}"
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO debts
+            (id, name, phone, amount_due, due_date, breach_date, status, salary_date, next_action,
+             due_now_percent_override, min_payment_today_percent_override, cycle_days_override)
+            VALUES (?, ?, ?, ?, ?, ?, 'new', ?, 'call_borrower', ?, ?, ?)""",
+            (
+                debt_id, req.name, req.phone, req.amount_due, req.due_date, req.breach_date,
+                req.salary_date, req.due_now_percent, req.min_payment_today_percent, req.cycle_days,
+            ),
+        )
+    with get_conn() as conn:
+        debt = conn.execute("SELECT * FROM debts WHERE id = ?", (debt_id,)).fetchone()
+    return dict(debt)
 
 
 @router.post("/api/reset-demo")
@@ -50,6 +111,31 @@ def get_debt_detail(debt_id: str):
         "memory": [dict(r) for r in memory],
         "agent_actions": [dict(r) for r in actions],
     }
+
+
+@router.post("/api/debts/{debt_id}/update")
+def update_debt(debt_id: str, req: DebtUpdateRequest):
+    """Edit an existing customer's per-cycle repayment terms. Only fields
+    present in the request body are changed (sending null clears an override
+    back to the policy default) - omitted fields keep whatever they were."""
+    fields = req.model_dump(exclude_unset=True)
+    _validate_repayment_terms(
+        fields.get("due_now_percent"), fields.get("min_payment_today_percent"), fields.get("cycle_days")
+    )
+    column_map = {
+        "due_now_percent": "due_now_percent_override",
+        "min_payment_today_percent": "min_payment_today_percent_override",
+        "cycle_days": "cycle_days_override",
+    }
+    with get_conn() as conn:
+        existing = conn.execute("SELECT id FROM debts WHERE id = ?", (debt_id,)).fetchone()
+        if existing is None:
+            raise HTTPException(404, "not found")
+        if fields:
+            set_clause = ", ".join(f"{column_map[k]} = ?" for k in fields)
+            conn.execute(f"UPDATE debts SET {set_clause} WHERE id = ?", (*fields.values(), debt_id))
+        debt = conn.execute("SELECT * FROM debts WHERE id = ?", (debt_id,)).fetchone()
+    return dict(debt)
 
 
 @router.get("/api/debts/{debt_id}/progress")

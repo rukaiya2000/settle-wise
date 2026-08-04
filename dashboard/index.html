@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SettleWise</title>
-  <link rel="stylesheet" href="styles.css?v=3" />
+  <link rel="stylesheet" href="styles.css?v=4" />
 </head>
 <body>
   <header class="topbar">
@@ -20,6 +20,10 @@
 
   <main id="app">
     <section id="profilesView">
+      <div class="view-head">
+        <h1>Borrowers</h1>
+        <button id="addCustomerButton">Add customer</button>
+      </div>
       <table class="debt-table">
         <thead>
           <tr>
@@ -53,6 +57,35 @@
       <div id="callStatus" class="call-status hidden"></div>
 
       <dl class="facts" id="progFacts"></dl>
+
+      <section id="repaymentPanel" class="panel">
+        <div class="panel-head">
+          <h3>Repayment terms</h3>
+          <button id="repaymentEditToggle" class="ghost row-run">Edit</button>
+        </div>
+        <div id="repaymentView" class="facts-inline"></div>
+        <form id="repaymentForm" class="hidden">
+          <div class="field-row">
+            <div class="field">
+              <label for="rpDueNowPct">Repayment % / cycle</label>
+              <input id="rpDueNowPct" type="number" min="0.1" max="100" step="0.1" placeholder="policy default" />
+            </div>
+            <div class="field">
+              <label for="rpFloorPct">Floor %</label>
+              <input id="rpFloorPct" type="number" min="0.1" max="100" step="0.1" placeholder="policy default" />
+            </div>
+            <div class="field">
+              <label for="rpCycleDays">Cycle (days)</label>
+              <input id="rpCycleDays" type="number" min="1" step="1" placeholder="policy default" />
+            </div>
+          </div>
+          <div id="repaymentError" class="pay-error hidden"></div>
+          <div class="field-actions">
+            <button type="submit" id="repaymentSave">Save</button>
+            <button type="button" id="repaymentCancel" class="ghost">Cancel</button>
+          </div>
+        </form>
+      </section>
 
       <div class="metrics-row" id="progMetrics"></div>
 
@@ -113,6 +146,61 @@
     </div>
   </div>
 
-  <script src="app.js?v=3"></script>
+  <div id="addCustomerOverlay" class="overlay hidden">
+    <div class="pay-modal form-modal" role="dialog" aria-modal="true" aria-labelledby="addCustomerTitle">
+      <button class="overlay-close" id="addCustomerClose" aria-label="Close">&times;</button>
+      <div class="pay-brand" id="addCustomerTitle">Add customer</div>
+      <div class="pay-sub">Their debt profile and repayment terms.</div>
+      <form id="addCustomerForm">
+        <div class="field">
+          <label for="acName">Name</label>
+          <input id="acName" required />
+        </div>
+        <div class="field">
+          <label for="acPhone">Phone</label>
+          <input id="acPhone" required placeholder="+15551234567" />
+        </div>
+        <div class="field">
+          <label for="acAmount">Amount due</label>
+          <input id="acAmount" type="number" min="0.01" step="0.01" required />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="acDueDate">Due date</label>
+            <input id="acDueDate" type="date" />
+          </div>
+          <div class="field">
+            <label for="acBreachDate">Breach date</label>
+            <input id="acBreachDate" type="date" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="acSalaryDate">Salary date</label>
+          <input id="acSalaryDate" placeholder="e.g. 5th of every month" />
+        </div>
+        <div class="field-group">
+          <div class="field-group-label">Repayment terms <span class="subtle">(optional, defaults to policy)</span></div>
+          <div class="field-row">
+            <div class="field">
+              <label for="acDueNowPct">Repayment % / cycle</label>
+              <input id="acDueNowPct" type="number" min="0.1" max="100" step="0.1" placeholder="10" />
+            </div>
+            <div class="field">
+              <label for="acFloorPct">Floor %</label>
+              <input id="acFloorPct" type="number" min="0.1" max="100" step="0.1" placeholder="5" />
+            </div>
+            <div class="field">
+              <label for="acCycleDays">Cycle (days)</label>
+              <input id="acCycleDays" type="number" min="1" step="1" placeholder="5" />
+            </div>
+          </div>
+        </div>
+        <div id="addCustomerError" class="pay-error hidden"></div>
+        <button type="submit" class="pay-submit" id="addCustomerSubmit">Add customer</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js?v=4"></script>
 </body>
 </html>

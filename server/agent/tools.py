@@ -23,6 +23,21 @@ def _now_iso() -> str:
     return get_demo_now().isoformat()
 
 
+def effective_policy(debt: dict, policy: dict) -> dict:
+    """Overlay this debt's per-customer repayment overrides onto the global
+    policy defaults - a borrower with their own agreed terms (repayment %,
+    floor %, cycle length) gets those instead of the policy row's."""
+    merged = dict(policy)
+    for key, col in (
+        ("due_now_percent", "due_now_percent_override"),
+        ("min_payment_today_percent", "min_payment_today_percent_override"),
+        ("cycle_days", "cycle_days_override"),
+    ):
+        if debt.get(col) is not None:
+            merged[key] = debt[col]
+    return merged
+
+
 # --- Read tools --------------------------------------------------------
 
 
@@ -51,9 +66,12 @@ def get_debt_profile(debt_id: str) -> dict:
     if "error" in debt:
         return debt
 
-    policy = _get_policy()
+    policy = effective_policy(debt, _get_policy())
     t = offer_engine.payment_targets(debt["amount_due"], debt["amount_collected"], policy)
     total = debt.pop("amount_due")
+    debt.pop("due_now_percent_override", None)
+    debt.pop("min_payment_today_percent_override", None)
+    debt.pop("cycle_days_override", None)
     debt["total_balance_DO_NOT_QUOTE"] = total
     debt["due_today_ASK_FOR_THIS"] = t["due_now"]
     debt["minimum_acceptable_today"] = t["floor"]
@@ -119,7 +137,7 @@ def generate_offer_options(debt_id: str, borrower_can_pay_today: float | None = 
     debt = _debt_row(debt_id)
     if "error" in debt:
         return debt
-    policy = _get_policy()
+    policy = effective_policy(debt, _get_policy())
     with get_conn() as conn:
         has_income_date = (
             conn.execute(

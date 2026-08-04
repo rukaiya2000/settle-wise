@@ -28,7 +28,7 @@
 
 ## Engineering
 
-- Should seed data live in JSON, SQLite, or Postgres?
+- ~~Should seed data live in JSON, SQLite, or Postgres?~~ Resolved: SQLite is the runtime DB, seeded once from a JSON fixture file.
 - Should payment links route to a fake `/pay` page?
 - How should call transcripts and SMS events be shown in the UI?
 - Which model/runtime will power conversations?

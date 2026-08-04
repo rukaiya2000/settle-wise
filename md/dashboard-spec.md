@@ -32,9 +32,14 @@ Profile card/table fields:
 
 Primary actions:
 
+- `Add customer`
 - `Run agent`
 - `Retry now`, when a previous call failed or follow-up is due
 - `View progress`
+
+### Add Customer
+
+A small form/modal for creating a new debt profile: borrower name, phone, amount due, due date, breach date, salary date (optional), and optional per-customer repayment terms (repayment % per cycle, floor %, cycle length in days). Leaving the repayment terms blank falls back to the policy default. Submitting adds the profile to the list immediately.
 
 Example card:
 
@@ -49,18 +54,16 @@ Last call: Can pay $300 today, rest after salary.
 [Run agent] [View progress]
 ```
 
-Status values:
+Status values actually produced by the backend today:
 
 - `new`
 - `scheduled`
-- `calling`
 - `no_answer`
-- `callback_requested`
 - `promised`
-- `link_sent`
-- `missed`
 - `paid`
 - `needs_review`
+
+`calling`, `link_sent`, `missed`, and `callback_requested` have status-chip styling reserved in the dashboard CSS but no backend code path sets them yet (see [data-model.md](./data-model.md)).
 
 Sorting:
 
@@ -182,11 +185,17 @@ Examples:
 
 This is important for the demo because it proves the agent is not just blasting calls; it is learning useful borrower context.
 
+### Repayment Terms
+
+Shows this borrower's per-cycle repayment %, floor %, and cycle length - either a custom value set for this customer, or "Policy default" if unset. An `Edit` toggle reveals the same three fields for updating; saving only changes the fields submitted, and clearing a field back to blank reverts that term to the policy default.
+
 ## Demo Interactions
 
 Minimum interactions:
 
+- Click `Add customer` and create a new profile, with or without custom repayment terms.
 - Select a person from the profiles page.
+- Edit a borrower's repayment terms on their progress page.
 - Click `Run agent` against that person.
 - Click `Retry now` if the previous call was `no_answer` or a promise was missed.
 - Advance the demo clock by `+1 hour`, `+1 day`, or `+3 days`.

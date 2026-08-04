@@ -237,7 +237,7 @@ def _debt_context(debt_id: str) -> str:
     debt = agent_tools._debt_row(debt_id)
     if "error" in debt:
         return f"(no debt found for {debt_id})"
-    policy = agent_tools.get_policy()
+    policy = agent_tools.effective_policy(debt, agent_tools.get_policy())
     memory = agent_tools.get_memory(debt_id).get("memory", [])
     eligibility = agent_tools.check_call_allowed(debt_id)
 

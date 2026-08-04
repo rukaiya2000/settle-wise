@@ -18,10 +18,10 @@ Collect the highest practical payment before breach while keeping the conversati
 1. Greet borrower.
 2. Confirm identity before sharing debt-specific information.
 3. Give approved disclosure.
-4. State amount due and deadline.
-5. Ask whether full payment can be made today.
+4. State the amount due today - 10% of the outstanding balance (`due_now`), repeating every 5 days until the balance clears - and the deadline. Never open with the full outstanding balance.
+5. Ask whether they can pay that amount today.
 6. If not, ask what amount can be paid today.
-7. Offer approved alternatives from the offer engine.
+7. Offer approved alternatives from the offer engine, negotiating downward but never below 5% of the outstanding balance (the hard floor for this cycle).
 8. Confirm agreement terms.
 9. Send payment link.
 10. Summarize next steps.
@@ -29,11 +29,12 @@ Collect the highest practical payment before breach while keeping the conversati
 
 ## Negotiation Rules
 
-- Always ask for full payment first unless policy says otherwise.
+- Always open with the amount due for this cycle - 10% of the outstanding balance (`due_now`) - never the full balance. Asking for the full balance first and then dropping to 10% teaches the borrower the number is soft and invites lowball counters.
+- Negotiate downward from there if they push back, but never below 5% of the outstanding balance - that is the hard floor for this cycle.
+- If an offer would fall below the 5% floor, do not accept it and do not counter - stop negotiating and escalate to human review.
 - Do not offer a discount unless the offer engine returns one.
 - Do not create custom installment plans outside approved ranges.
 - If borrower gives salary date, use it to schedule a payment or reminder.
-- If borrower says they cannot pay, ask whether a smaller amount today is possible.
 - If borrower expresses hardship, switch to hardship handling and consider human review.
 - If borrower disputes the debt, stop collection negotiation and trigger dispute workflow.
 - If borrower requests no further contact, acknowledge and update contact preferences.

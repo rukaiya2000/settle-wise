@@ -600,3 +600,85 @@ button.ghost {
 .pay-open { margin-top: 6px; }
 .pay-open button { padding: 6px 12px; font-size: 12px; }
 .paid-tag { color: var(--green); font-size: 12px; font-weight: 600; margin-top: 6px; }
+
+/* ---- Add customer / edit repayment terms forms ---------------------- */
+
+.view-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.view-head h1 { margin: 0; font-size: 20px; }
+
+.form-modal { max-width: 460px; text-align: left; }
+
+.field { margin-bottom: 14px; }
+
+.field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 5px;
+}
+
+.field input {
+  width: 100%;
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-bg);
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 12px;
+}
+
+.field-group {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  margin-top: 4px;
+}
+
+.field-group-label {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.field-group-label .subtle { font-weight: 400; text-transform: none; }
+
+.field-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* Repayment terms panel on the person progress page. */
+.facts-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  font-size: 13px;
+}
+
+.facts-inline .term-label { color: var(--subtle); margin-right: 4px; }
+.facts-inline .term-value { font-weight: 600; }
+.facts-inline .term-value.custom { color: var(--teal); }
+
+#repaymentForm.hidden { display: none; }
+#repaymentForm { margin-top: 12px; }

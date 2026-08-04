@@ -26,11 +26,16 @@ Main table. One row per borrower/debt.
 | amount_promised | number | `550` |
 | due_date | date | `2026-08-05` |
 | breach_date | date | `2026-08-10` |
-| status | enum | `new`, `scheduled`, `calling`, `no_answer`, `callback_requested`, `promised`, `link_sent`, `missed`, `paid`, `needs_review` |
+| status | enum | `new`, `scheduled`, `no_answer`, `promised`, `paid`, `needs_review` (`calling`, `link_sent`, `missed`, `callback_requested` are recommended in [technical-spec.md](./technical-spec.md) but no code path sets them today) |
 | salary_date | string | `5th of every month` |
 | last_call_summary | text | `Can pay 300 today, rest after salary.` |
 | next_action_at | datetime | `2026-08-05T10:00:00` |
 | next_action | string | `call_borrower`, `send_payment_link`, `send_sms_reminder`, `check_payment_status`, `human_review` |
+| due_now_percent_override | number, nullable | `15` |
+| min_payment_today_percent_override | number, nullable | `7` |
+| cycle_days_override | integer, nullable | `7` |
+
+The three override fields are per-customer repayment terms, editable when adding or updating a debt. `NULL` (the default) means this borrower uses the `policies` row's `due_now_percent` / `min_payment_today_percent` / `cycle_days` instead - see `server/agent/tools.py:effective_policy`.
 
 ## `calls`
 
@@ -85,7 +90,9 @@ One object, not a table. It controls fake time for the demo.
 | timezone | string | `America/Los_Angeles` |
 | speed | string | `paused` |
 
-## Example Seed JSON
+## Example Seed Fixture (`data/seed.json`)
+
+Loaded once by `seed.py` into the SQLite tables above via `INSERT OR REPLACE` - this file is a seed fixture, not the runtime database.
 
 ```json
 {

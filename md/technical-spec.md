@@ -7,11 +7,11 @@ Use Python for the backend and agent orchestration.
 Suggested minimal stack:
 
 - Python backend: `FastAPI`
-- Local DB: JSON file for hackathon simplicity
+- Local DB: SQLite, single file (`data/settlewise.db`)
 - Agent/model calls: OpenAI
 - Voice agent: OpenAI Realtime API or equivalent voice session layer
 - Frontend: simple web app, probably React or plain HTML for demo speed
-- Runtime state: in-memory cache plus periodic writes to JSON
+- Runtime state: read/write directly against SQLite per request - no separate in-memory cache
 
 OpenAI docs to reference during implementation:
 
@@ -27,7 +27,7 @@ Frontend
   Voice call UI / transcript view
         |
 Python API
-  JSON DB service
+  SQLite DB service
   Policy service
   Agent orchestrator
   Tool handlers
@@ -58,39 +58,24 @@ OpenAI
    - update debt status
 8. Person progress page updates with calls made, collected, promised, SMS links sent, and next action.
 
-## JSON DB
+## SQLite DB
 
 Keep this as one file for the hackathon:
 
 ```text
-data/settlewise.json
+data/settlewise.db
 ```
 
-Top-level collections:
-
-```json
-{
-  "debts": [],
-  "calls": [],
-  "sms_messages": [],
-  "memory": [],
-  "policies": [],
-  "demo_clock": {
-    "current_time": "2026-08-01T09:00:00",
-    "speed": "paused"
-  }
-}
-```
+Tables: `debts`, `calls`, `sms_messages`, `memory`, `policies`, `demo_clock`.
 
 Use the simple schema from [data-model.md](./data-model.md).
 
 Implementation notes:
 
-- Load JSON at startup.
-- Keep an in-memory copy.
-- Write back after every tool mutation.
+- Create tables with `CREATE TABLE IF NOT EXISTS` on startup, and run any column migrations before serving requests.
+- Open a connection per request/tool call rather than holding a long-lived connection or an in-memory cache.
 - Use generated IDs like `debt_001`, `call_001`, `sms_001`.
-- For demo reliability, seed deterministic synthetic data.
+- For demo reliability, seed deterministic synthetic data from a fixture file (see [data-model.md](./data-model.md)).
 - Use `demo_clock.current_time` instead of the real system clock for all demo workflows.
 
 ## Synthetic Policy
@@ -103,7 +88,9 @@ Example policy:
 {
   "id": "policy_default",
   "max_discount_percent": 15,
-  "min_payment_today_percent": 20,
+  "due_now_percent": 10,
+  "cycle_days": 5,
+  "min_payment_today_percent": 5,
   "max_installments": 3,
   "call_attempts_per_day": 2,
   "allowed_call_hours": {
@@ -119,6 +106,8 @@ Example policy:
   ]
 }
 ```
+
+`due_now_percent`, `min_payment_today_percent`, and `cycle_days` are defaults, not fixed - any debt can override them per-customer (nullable `*_override` columns on `debts`, see [data-model.md](./data-model.md)). A debt with no override falls back to this policy row.
 
 Policy service responsibilities:
 
@@ -188,12 +177,35 @@ Input:
 
 #### `get_policy`
 
-Returns the synthetic policy.
+Returns the synthetic policy. Takes no input - always returns the default policy.
 
 Input:
 
 ```json
-{ "policy_id": "policy_default" }
+{}
+```
+
+#### `get_payment_history`
+
+What has actually been sent and paid on this account: every SMS payment link, its status, and how much has been collected. Call this before responding to "I already paid" or "you never sent me anything" - don't take either claim at face value, and don't contradict the borrower without checking first.
+
+Input:
+
+```json
+{ "debt_id": "debt_001" }
+```
+
+Output:
+
+```json
+{
+  "amount_due": 850,
+  "amount_collected": 300,
+  "outstanding": 550,
+  "messages": [
+    { "id": "sms_001", "payment_id": "pay_001", "sent_at": "2026-07-31T12:10:00", "type": "payment_link", "amount": 300, "payment_status": "paid", "payment_link": "/pay/pay_001" }
+  ]
+}
 ```
 
 ### Decision Tools
@@ -223,7 +235,7 @@ Input:
 ```json
 {
   "debt_id": "debt_001",
-  "borrower_can_pay_today": 300
+  "borrower_can_pay_today": 60
 }
 ```
 
@@ -231,12 +243,43 @@ Output:
 
 ```json
 {
+  "total_outstanding": 850,
+  "due_now": 85,
+  "minimum_acceptable_today": 42.5,
+  "cycle_days": 5,
+  "payments_to_clear": 10,
   "offers": [
-    { "type": "pay_today", "amount": 850 },
-    { "type": "partial", "amount_today": 300, "remaining": 550 },
-    { "type": "installment", "installments": [300, 275, 275] }
-  ]
+    { "type": "due_now", "amount": 85, "note": "due today - ask for this. Payment is expected today, not spread over weeks." },
+    { "type": "partial", "amount_today": 60, "short_this_cycle": 25 },
+    { "type": "discount_settlement", "amount": 72.25, "max_discount_percent": 15 }
+  ],
+  "below_floor": false,
+  "instruction": "They can pay 60, which is acceptable. Confirm it and send the payment link. Never accept less than 42.5."
 }
+```
+
+`due_now`, `minimum_acceptable_today`, and `cycle_days` reflect this debt's own repayment terms if it has an override, otherwise the policy default (see [data-model.md](./data-model.md)). If `borrower_can_pay_today` is below the floor, `below_floor` is `true` and `offers` is empty - the agent should stop negotiating and call `mark_needs_review`, not counter.
+
+#### `apply_discount`
+
+Checks a requested settlement discount against `max_discount_percent` and returns the settled amount.
+
+Input:
+
+```json
+{ "debt_id": "debt_001", "requested_pct": 10 }
+```
+
+Output:
+
+```json
+{ "approved": true, "settled_amount": 765 }
+```
+
+or, if the request exceeds policy:
+
+```json
+{ "approved": false, "reason": "requested 25% exceeds max 15% - route to human review" }
 ```
 
 ### Action Tools
@@ -278,6 +321,19 @@ Output:
   "sms_id": "sms_001",
   "payment_link": "/pay/pay_001",
   "payment_status": "sent"
+}
+```
+
+#### `send_sms`
+
+Texts the borrower right now, during the call - e.g. to confirm in writing what was just agreed, or send something they asked to have in writing. Sends immediately to their real phone. Use `send_sms_payment_link` instead when the message is a payment link, and `schedule_sms_reminder` to book one for later.
+
+Input:
+
+```json
+{
+  "debt_id": "debt_001",
+  "body": "Confirming: $300 today, $550 after your Aug 5 salary."
 }
 ```
 
@@ -340,6 +396,20 @@ Input:
 }
 ```
 
+#### `flag_borrower`
+
+Records a conduct problem on the borrower's profile - abuse, threats, or flat refusal to engage after warnings - so whoever picks this up next sees it before dialling. Severity `warning` notes it while keeping the account collectable; `abuse` also suspends automated collection and routes to human review.
+
+Input:
+
+```json
+{
+  "debt_id": "debt_001",
+  "reason": "Borrower used threatening language after being asked to stop.",
+  "severity": "abuse"
+}
+```
+
 #### `mark_needs_review`
 
 Routes edge cases to human review.
@@ -369,9 +439,12 @@ Core behavior:
 
 ```text
 You are SettleWise, a voice debt collection agent.
-Your goal is to collect full payment today if possible.
-If full payment is not possible, negotiate partial payment today.
-If needed, offer installments or a discount within policy.
+Always ask for the amount due this cycle first - 10 percent of the
+outstanding balance (due_now), repeating every 5 days until the balance
+clears. Never open by asking for the full outstanding balance.
+If they push back, negotiate downward, but never below 5 percent of the
+outstanding balance - that is the hard floor. Below it, stop negotiating
+and escalate to human review.
 Use SMS only for payment links, reminders, and confirmations.
 Use tools for offers, SMS links, memory, status updates, and review.
 Do not invent payment links, discounts, or status changes.
@@ -384,11 +457,15 @@ Minimum API:
 
 ```text
 GET  /api/debts
+POST /api/debts
 GET  /api/debts/{debt_id}
+POST /api/debts/{debt_id}/update
 POST /api/debts/{debt_id}/run-agent
 GET  /api/debts/{debt_id}/progress
 POST /api/payments/{payment_id}/mark-paid
 ```
+
+`POST /api/debts` creates a customer (name, phone, amount, dates, and optionally per-customer `due_now_percent`/`min_payment_today_percent`/`cycle_days`). `POST /api/debts/{debt_id}/update` edits those same repayment-term fields on an existing customer - only fields present in the body are changed; sending `null` clears an override back to the policy default.
 
 Optional:
 
@@ -432,6 +509,8 @@ Recommended states:
 | `missed` | Promise date passed without payment |
 | `paid` | Debt is settled for the demo |
 | `needs_review` | Human should handle the case |
+
+As built, only `new`, `scheduled`, `no_answer`, `promised`, `paid`, and `needs_review` are actually set as `debts.status` anywhere in the code (`server/agent/tools.py`, `simulated_call.py`, `routes/dashboard.py`). `calling`, `link_sent`, and `missed` were never wired up to any transition. `callback_requested` exists, but only as a `calls.outcome` value (`record_call_event`), not a `debts.status` - see [data-model.md](./data-model.md).
 
 Recommended scheduled action types:
 
@@ -902,15 +981,16 @@ Have visible demo states for:
 Keep config in one place:
 
 ```text
-config/policy.json
-config/demo_settings.json
+.env   # read via server/config.py (os.getenv)
 ```
+
+Policy and demo-clock values live as rows in the SQLite `policies` and `demo_clock` tables, not separate config files - see [data-model.md](./data-model.md).
 
 ### Testing
 
 Useful tiny tests:
 
-- JSON DB read/write does not corrupt file.
+- SQLite read/write does not corrupt the DB file.
 - offer generation respects max discount.
 - `mark-paid` updates debt status.
 - `run-agent` creates a call record.
@@ -918,8 +998,8 @@ Useful tiny tests:
 
 ## Build Order
 
-1. Create synthetic JSON DB.
-2. Implement JSON DB service.
+1. Create the SQLite schema and seed fixture.
+2. Implement the DB service (SQLite).
 3. Implement policy service.
 4. Implement tool handlers.
 5. Implement fake `run-agent` flow with deterministic transcript.
