@@ -39,7 +39,7 @@ Primary actions:
 
 ### Add Customer
 
-A small form/modal for creating a new debt profile: borrower name, phone, amount due, due date, breach date, salary date (optional), and optional per-customer repayment terms (repayment % per cycle, floor %, cycle length in days). Leaving the repayment terms blank falls back to the policy default. Submitting adds the profile to the list immediately.
+A small form/modal for creating a new debt profile: borrower name, phone, amount due, breach date, salary date (optional), and optional per-customer repayment terms (repayment % per cycle, floor %, cycle length in days). There is no due-date field - repayment starts the day the customer is added, using the demo clock's current date, not a manually picked one. Leaving the repayment terms blank falls back to the policy default. Submitting adds the profile to the list immediately.
 
 Example card:
 

@@ -42,6 +42,25 @@ def _schedule(due_now: float, remaining: float, cycle_days: int, start) -> list[
     return plan
 
 
+def payment_schedule(amount_due: float, amount_collected: float, policy: dict, start, limit: int = 8) -> dict:
+    """Upcoming due_now installments for the dashboard, sized/spaced per this
+    debt's effective policy, anchored on `start` (the demo clock's current
+    time) rather than a fixed calendar date - so it always reads as "what's
+    next from today", never a stale schedule if payments arrived out of step
+    with a projected date. `limit` caps the list actually returned; the true
+    remaining count is still reported via cycles_to_clear/more_cycles."""
+    t = payment_targets(amount_due, amount_collected, policy)
+    full = _schedule(t["due_now"], t["remaining"], t["cycle_days"], start)
+    return {
+        "due_now": t["due_now"],
+        "minimum_acceptable_today": t["floor"],
+        "cycle_days": t["cycle_days"],
+        "cycles_to_clear": t["cycles_to_clear"],
+        "schedule": full[:limit],
+        "more_cycles": max(0, len(full) - limit),
+    }
+
+
 def generate_offer_options(
     amount_due: float,
     amount_collected: float,

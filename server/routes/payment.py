@@ -12,6 +12,8 @@ from fastapi.responses import HTMLResponse
 
 from ..agent import tools as agent_tools
 from ..db import get_conn
+from .. import offer_engine
+from ..policy import get_policy
 
 router = APIRouter()
 
@@ -107,9 +109,23 @@ async function pay() {{
   try {{
     const res = await fetch('/pay/{payment_id}/complete', {{ method: 'POST' }});
     if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    const shortfall = data.shortfall_this_cycle || 0;
     // Swap to the receipt in place - a reload would lose the transition and
-    // the borrower is on a phone.
-    document.getElementById('card').outerHTML = `{_receipt(amount, name).split('<body>')[1].split('</body>')[0].strip()}`;
+    // the borrower is on a phone. Built here (not reusing the server-rendered
+    // receipt) because the shortfall is only known once payment completes.
+    document.getElementById('card').outerHTML = `
+      <div class="card ok">
+        <div class="tick">&check;</div>
+        <h2>Payment received</h2>
+        <div class="sub">$${{data.amount_paid}} paid. Thank you, {name}.</div>
+        <div class="rows">
+          <div class="row"><span>Amount</span><span>$${{data.amount_paid}}</span></div>
+          <div class="row"><span>Status</span><span>Paid</span></div>
+          ${{shortfall > 0 ? `<div class="row"><span>Still due this cycle</span><span>$${{shortfall}}</span></div>` : ''}}
+        </div>
+        <div class="note">${{shortfall > 0 ? 'A reminder for the rest of this cycle will follow.' : 'A confirmation has been added to your account.'}}</div>
+      </div>`;
   }} catch (e) {{
     btn.disabled = false; btn.textContent = 'Pay ${amount:g}';
     err.textContent = 'Payment failed: ' + e.message; err.style.display = 'block';
@@ -126,8 +142,29 @@ def complete_payment(payment_id: str):
     if sms["payment_status"] == "paid":
         # Tapping twice must not collect twice.
         return {"payment_id": payment_id, "status": "already_paid"}
-    debt = agent_tools.mark_paid(sms["debt_id"], sms["amount"], sms_id=sms["id"])
-    return {"payment_id": payment_id, "status": "paid", "debt": debt}
+
+    # What was actually due this cycle, computed BEFORE the payment lands -
+    # if they paid the floor rather than the full due_now, the diff is what's
+    # still short for this cycle. amount_collected already going up covers it
+    # for *future* cycles automatically (due_now is a fresh % of whatever
+    # remains); this is just making that gap visible at the moment it opens.
+    debt_before = agent_tools._debt_row(sms["debt_id"])
+    policy = agent_tools.effective_policy(debt_before, get_policy())
+    due_now_before = offer_engine.payment_targets(
+        debt_before["amount_due"], debt_before["amount_collected"], policy
+    )["due_now"]
+    amount_paid = sms["amount"] or 0
+    shortfall = round(max(0.0, due_now_before - amount_paid), 2)
+
+    debt = agent_tools.mark_paid(sms["debt_id"], amount_paid, sms_id=sms["id"])
+    return {
+        "payment_id": payment_id,
+        "status": "paid",
+        "debt": debt,
+        "amount_paid": amount_paid,
+        "cycle_due": due_now_before,
+        "shortfall_this_cycle": shortfall,
+    }
 
 
 @router.post("/api/payments/{payment_id}/mark-paid")

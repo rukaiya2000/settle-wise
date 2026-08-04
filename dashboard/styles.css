@@ -596,6 +596,15 @@ button.ghost {
 
 .pay-done h3 { margin: 0 0 6px; font-size: 19px; }
 
+.pay-shortfall {
+  background: var(--amber-bg);
+  color: var(--amber);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  margin: 0 0 14px;
+}
+
 /* The payment link in the SMS feed - a button, not a link out of the app. */
 .pay-open { margin-top: 6px; }
 .pay-open button { padding: 6px 12px; font-size: 12px; }
@@ -682,3 +691,28 @@ button.ghost {
 
 #repaymentForm.hidden { display: none; }
 #repaymentForm { margin-top: 12px; }
+
+.schedule { margin-top: 14px; }
+
+.schedule-summary {
+  font-size: 12px;
+  color: var(--subtle);
+  margin-bottom: 8px;
+}
+
+.schedule-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.schedule-row:first-of-type { border-top: none; }
+.schedule-row .due-note { margin-left: 6px; }
+
+.schedule-more {
+  padding-top: 6px;
+  font-style: italic;
+}

@@ -8,6 +8,9 @@ from pydantic import BaseModel
 from ..agent import tools as agent_tools
 from ..agent.simulated_call import run_simulated_call
 from ..db import get_conn
+from ..demo_clock import get_demo_now
+from .. import offer_engine
+from ..policy import get_policy
 from .vapi import poll_vapi_call_until_ended
 from ..seed import reset_db
 from ..vapi_setup import place_call
@@ -19,7 +22,6 @@ class DebtCreateRequest(BaseModel):
     name: str
     phone: str
     amount_due: float
-    due_date: str | None = None
     breach_date: str | None = None
     salary_date: str | None = None
     due_now_percent: float | None = None
@@ -64,6 +66,10 @@ def create_debt(req: DebtCreateRequest):
     _validate_repayment_terms(req.due_now_percent, req.min_payment_today_percent, req.cycle_days)
 
     debt_id = f"debt_{uuid.uuid4().hex[:8]}"
+    # The repayment cycle starts today (the demo clock's today, not the
+    # server's) rather than a manually-picked due date - due_now/cycle_days
+    # count from whenever the customer is actually added.
+    start_date = get_demo_now().strftime("%Y-%m-%d")
     with get_conn() as conn:
         conn.execute(
             """INSERT INTO debts
@@ -71,7 +77,7 @@ def create_debt(req: DebtCreateRequest):
              due_now_percent_override, min_payment_today_percent_override, cycle_days_override)
             VALUES (?, ?, ?, ?, ?, ?, 'new', ?, 'call_borrower', ?, ?, ?)""",
             (
-                debt_id, req.name, req.phone, req.amount_due, req.due_date, req.breach_date,
+                debt_id, req.name, req.phone, req.amount_due, start_date, req.breach_date,
                 req.salary_date, req.due_now_percent, req.min_payment_today_percent, req.cycle_days,
             ),
         )
@@ -151,6 +157,8 @@ def get_debt_progress(debt_id: str):
         sms_links_sent = conn.execute(
             "SELECT COUNT(*) AS n FROM sms_messages WHERE debt_id = ? AND type = 'payment_link'", (debt_id,)
         ).fetchone()["n"]
+    policy = agent_tools.effective_policy(debt, get_policy())
+    schedule_info = offer_engine.payment_schedule(debt["amount_due"], debt["amount_collected"], policy, get_demo_now())
     return {
         "debt_id": debt_id,
         "amount_due": debt["amount_due"],
@@ -161,6 +169,7 @@ def get_debt_progress(debt_id: str):
         "status": debt["status"],
         "next_action": debt["next_action"],
         "next_action_at": debt["next_action_at"],
+        **schedule_info,
     }
 
 

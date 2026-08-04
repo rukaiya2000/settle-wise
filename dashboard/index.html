@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SettleWise</title>
-  <link rel="stylesheet" href="styles.css?v=4" />
+  <link rel="stylesheet" href="styles.css?v=5" />
 </head>
 <body>
   <header class="topbar">
@@ -64,6 +64,7 @@
           <button id="repaymentEditToggle" class="ghost row-run">Edit</button>
         </div>
         <div id="repaymentView" class="facts-inline"></div>
+        <div id="repaymentSchedule" class="schedule"></div>
         <form id="repaymentForm" class="hidden">
           <div class="field-row">
             <div class="field">
@@ -150,7 +151,7 @@
     <div class="pay-modal form-modal" role="dialog" aria-modal="true" aria-labelledby="addCustomerTitle">
       <button class="overlay-close" id="addCustomerClose" aria-label="Close">&times;</button>
       <div class="pay-brand" id="addCustomerTitle">Add customer</div>
-      <div class="pay-sub">Their debt profile and repayment terms.</div>
+      <div class="pay-sub">Their debt profile and repayment terms. Repayment starts today.</div>
       <form id="addCustomerForm">
         <div class="field">
           <label for="acName">Name</label>
@@ -164,15 +165,9 @@
           <label for="acAmount">Amount due</label>
           <input id="acAmount" type="number" min="0.01" step="0.01" required />
         </div>
-        <div class="field-row">
-          <div class="field">
-            <label for="acDueDate">Due date</label>
-            <input id="acDueDate" type="date" />
-          </div>
-          <div class="field">
-            <label for="acBreachDate">Breach date</label>
-            <input id="acBreachDate" type="date" />
-          </div>
+        <div class="field">
+          <label for="acBreachDate">Breach date</label>
+          <input id="acBreachDate" type="date" />
         </div>
         <div class="field">
           <label for="acSalaryDate">Salary date</label>
@@ -201,6 +196,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=4"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

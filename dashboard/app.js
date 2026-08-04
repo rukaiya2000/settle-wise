@@ -186,7 +186,7 @@ function feedItem(title, meta, body) {
 
 // Per-customer repayment overrides (server/agent/tools.py:effective_policy) -
 // null means this borrower falls back to the global policy default.
-function renderRepaymentSettings(debt) {
+function renderRepaymentSettings(debt, progress) {
   const rows = [
     ["Repayment % / cycle", debt.due_now_percent_override, "%"],
     ["Floor %", debt.min_payment_today_percent_override, "%"],
@@ -203,6 +203,47 @@ function renderRepaymentSettings(debt) {
   document.querySelector("#rpDueNowPct").value = debt.due_now_percent_override ?? "";
   document.querySelector("#rpFloorPct").value = debt.min_payment_today_percent_override ?? "";
   document.querySelector("#rpCycleDays").value = debt.cycle_days_override ?? "";
+
+  renderPaymentSchedule(progress);
+}
+
+// Resolved dollar schedule from server/offer_engine.py:payment_schedule -
+// due_now/floor already reflect this debt's overrides (or the policy
+// default), computed forward from today, not a stale fixed calendar date.
+function renderPaymentSchedule(progress) {
+  const el = document.querySelector("#repaymentSchedule");
+  if (!progress || !progress.schedule) {
+    el.innerHTML = "";
+    return;
+  }
+  if (!progress.schedule.length) {
+    el.innerHTML = '<div class="feed-empty">Nothing left to collect.</div>';
+    return;
+  }
+
+  const cycles = progress.cycles_to_clear;
+  const summary = `
+    <div class="schedule-summary">
+      ${money(progress.due_now)} due each cycle, every ${progress.cycle_days} day${progress.cycle_days === 1 ? "" : "s"}
+      &middot; floor ${money(progress.minimum_acceptable_today)}
+      &middot; ${cycles} cycle${cycles === 1 ? "" : "s"} to clear
+    </div>`;
+
+  const rows = progress.schedule
+    .map(
+      (c) => `
+      <div class="schedule-row">
+        <span>${formatDate(c.on)} <span class="due-note ${dueClass(c.on)}">${dueLabel(c.on)}</span></span>
+        <span>${money(c.amount)}</span>
+      </div>`,
+    )
+    .join("");
+
+  const more = progress.more_cycles > 0
+    ? `<div class="subtle schedule-more">+${progress.more_cycles} more cycle${progress.more_cycles === 1 ? "" : "s"} after this</div>`
+    : "";
+
+  el.innerHTML = summary + rows + more;
 }
 
 async function loadProgress(debtId) {
@@ -250,7 +291,7 @@ async function loadProgress(debtId) {
     .map(([k, v]) => `<div class="fact"><dt>${k}</dt><dd>${v}</dd></div>`)
     .join("");
 
-  renderRepaymentSettings(d);
+  renderRepaymentSettings(d, progress);
 
   const cards = [
     { label: "Outstanding", value: money(progress.amount_due - progress.amount_collected) },
@@ -634,12 +675,17 @@ function openPayModal(paymentId, amount) {
     const existingError = payBody.querySelector(".pay-error");
     if (existingError) existingError.remove();
     try {
-      await api(`/pay/${paymentId}/complete`, { method: "POST" });
+      const result = await api(`/pay/${paymentId}/complete`, { method: "POST" });
+      const shortfall = result.shortfall_this_cycle || 0;
+      const shortfallNote = shortfall > 0
+        ? `<div class="pay-shortfall">${money(shortfall)} still due this cycle - it'll carry into the upcoming schedule.</div>`
+        : "";
       payBody.innerHTML = `
         <div class="pay-done">
           <div class="pay-tick">&check;</div>
           <h3>Payment received</h3>
           <div class="pay-sub">${money(amount)} paid. Thank you, ${name}.</div>
+          ${shortfallNote}
           <button class="pay-submit" id="payDone">Done</button>
         </div>`;
       // Refresh underneath first, so closing reveals the new balance rather
@@ -752,7 +798,6 @@ addCustomerForm.addEventListener("submit", async (e) => {
     name: document.querySelector("#acName").value.trim(),
     phone: document.querySelector("#acPhone").value.trim(),
     amount_due: Number(document.querySelector("#acAmount").value),
-    due_date: emptyToNull(document.querySelector("#acDueDate").value),
     breach_date: emptyToNull(document.querySelector("#acBreachDate").value),
     salary_date: emptyToNull(document.querySelector("#acSalaryDate").value),
     due_now_percent: dueNowPct === null ? null : Number(dueNowPct),
