@@ -189,7 +189,6 @@ function renderTable() {
           <td>
             <button class="row-run" data-call="${d.id}">Call</button>
             <button class="row-run ghost" data-sms="${d.id}">SMS</button>
-            <button class="row-run ghost row-delete" data-delete="${d.id}">Delete</button>
           </td>
         </tr>
       `;
@@ -615,29 +614,6 @@ document.querySelector("#debtTable").addEventListener("click", async (e) => {
     return;
   }
 
-  const deleteBtn = e.target.closest("[data-delete]");
-  if (deleteBtn) {
-    e.stopPropagation();
-    const debt = debts.find((d) => d.id === deleteBtn.dataset.delete);
-    const confirmed = window.confirm(
-      `Permanently delete ${debt ? debt.name : "this borrower"}?\n\nThis removes their debt profile and every call, SMS, and memory fact tied to it. This cannot be undone.`,
-    );
-    if (!confirmed) return;
-
-    deleteBtn.disabled = true;
-    deleteBtn.textContent = "Deleting...";
-    try {
-      await api(`/api/debts/${deleteBtn.dataset.delete}/delete`, { method: "POST" });
-      selectedIds.delete(deleteBtn.dataset.delete);
-      await loadDebts();
-    } catch (err) {
-      window.alert(`Delete failed: ${err.message}`);
-      deleteBtn.disabled = false;
-      deleteBtn.textContent = "Delete";
-    }
-    return;
-  }
-
   const smsBtn = e.target.closest("[data-sms]");
   if (smsBtn) {
     e.stopPropagation();
@@ -1030,27 +1006,23 @@ editProfileForm.addEventListener("submit", async (e) => {
   }
 });
 
-document.querySelector("#deleteCustomerButton").addEventListener("click", async () => {
+document.querySelector("#deleteCustomerIconButton").addEventListener("click", async () => {
   if (!currentDebt) return;
   const confirmed = window.confirm(
     `Permanently delete ${currentDebt.name}?\n\nThis removes their debt profile and every call, SMS, and memory fact tied to it. This cannot be undone.`,
   );
   if (!confirmed) return;
 
-  const button = document.querySelector("#deleteCustomerButton");
+  const button = document.querySelector("#deleteCustomerIconButton");
   button.disabled = true;
-  button.textContent = "Deleting...";
   try {
     const debtId = window.location.hash.replace(/^#\/?/, "");
     await api(`/api/debts/${debtId}/delete`, { method: "POST" });
-    closeEditProfileModal();
     window.location.hash = "";
     await loadDebts();
   } catch (err) {
-    editProfileError.textContent = `Failed to delete: ${err.message}`;
-    editProfileError.classList.remove("hidden");
+    window.alert(`Failed to delete: ${err.message}`);
     button.disabled = false;
-    button.textContent = "Delete customer";
   }
 });
 

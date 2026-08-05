@@ -161,7 +161,31 @@ button.ghost {
 
 .row-run + .row-run { margin-left: 6px; }
 
-.progress-actions { display: flex; gap: 8px; }
+.progress-actions { display: flex; gap: 8px; align-items: center; }
+
+/* Neutral until hover/focus, so a destructive action doesn't compete
+   visually with the routine Call/SMS/Edit buttons beside it - discoverable,
+   not alarming, until you actually reach for it. */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  margin-left: 4px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--subtle);
+}
+
+.icon-button:hover {
+  background: var(--red-bg);
+  border-color: var(--red-bg);
+  color: var(--red);
+}
+
+.icon-button:disabled { opacity: 0.5; cursor: default; }
 
 .progress-header {
   display: flex;
@@ -605,35 +629,6 @@ button.ghost {
   margin: 0 0 14px;
 }
 
-/* Deliberately separated from the save action above it, so deleting a
-   customer takes an extra deliberate step rather than sitting next to the
-   routine "Save changes" button. */
-.danger-zone {
-  margin-top: 22px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-
-.danger-zone-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--red);
-  margin-bottom: 6px;
-}
-
-.danger-zone p { margin: 0 0 10px; font-size: 12px; }
-
-.danger-button {
-  width: 100%;
-  background: var(--red-bg);
-  color: var(--red);
-  border-color: transparent;
-}
-
-.danger-button:hover { background: var(--red); color: #fff; }
-
 /* The payment link in the SMS feed - a button, not a link out of the app. */
 .pay-open { margin-top: 6px; }
 .pay-open button { padding: 6px 12px; font-size: 12px; }
@@ -654,12 +649,6 @@ button.ghost {
 
 .select-col { width: 36px; text-align: center; }
 .select-col input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; }
-
-/* Row-level delete stands apart from Call/SMS in color, but stays the same
-   small size - it's a quick action, not the primary way to delete (that's
-   the confirm-gated danger zone on the profile page). */
-.row-run.row-delete { color: var(--red); border-color: var(--red-bg); }
-.row-run.row-delete:hover { background: var(--red-bg); }
 
 .row-delete-button {
   background: var(--red-bg);

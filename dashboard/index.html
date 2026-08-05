@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SettleWise</title>
-  <link rel="stylesheet" href="styles.css?v=9" />
+  <link rel="stylesheet" href="styles.css?v=10" />
 </head>
 <body>
   <header class="topbar">
@@ -56,6 +56,15 @@
           <button id="callBorrowerButton">Call borrower</button>
           <button id="smsBorrowerButton" class="ghost">Send SMS</button>
           <button id="editProfileButton" class="ghost">Edit profile</button>
+          <button id="deleteCustomerIconButton" class="icon-button" aria-label="Delete customer" title="Delete customer">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+              <path d="M10 11v6"></path>
+              <path d="M14 11v6"></path>
+              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -214,14 +223,9 @@
         <div id="editProfileError" class="pay-error hidden"></div>
         <button type="submit" class="pay-submit" id="editProfileSave">Save changes</button>
       </form>
-      <div class="danger-zone">
-        <div class="danger-zone-label">Danger zone</div>
-        <p class="subtle">Permanently deletes this customer and all of their calls, SMS, and memory. Cannot be undone.</p>
-        <button type="button" id="deleteCustomerButton" class="danger-button">Delete customer</button>
-      </div>
     </div>
   </div>
 
-  <script src="app.js?v=9"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>
