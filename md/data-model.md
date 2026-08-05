@@ -24,10 +24,8 @@ Main table. One row per borrower/debt.
 | amount_due | number | `850` |
 | amount_collected | number | `300` |
 | amount_promised | number | `550` |
-| due_date | date | `2026-08-05` |
-| breach_date | date | `2026-08-10` |
+| due_date | date | `2026-08-05` - repayment cycle start, auto-set to the demo clock's date when the customer is added |
 | status | enum | `new`, `scheduled`, `no_answer`, `promised`, `paid`, `needs_review` (`calling`, `link_sent`, `missed`, `callback_requested` are recommended in [technical-spec.md](./technical-spec.md) but no code path sets them today) |
-| salary_date | string | `5th of every month` |
 | last_call_summary | text | `Can pay 300 today, rest after salary.` |
 | next_action_at | datetime | `2026-08-05T10:00:00` |
 | next_action | string | `call_borrower`, `send_payment_link`, `send_sms_reminder`, `check_payment_status`, `human_review` |
@@ -36,6 +34,8 @@ Main table. One row per borrower/debt.
 | cycle_days_override | integer, nullable | `7` |
 
 The three override fields are per-customer repayment terms, editable when adding or updating a debt. `NULL` (the default) means this borrower uses the `policies` row's `due_now_percent` / `min_payment_today_percent` / `cycle_days` instead - see `server/agent/tools.py:effective_policy`.
+
+There is deliberately no `salary_date` (or `breach_date`) column - pre-filling a borrower's salary date before ever speaking to them was a privacy liability with no offsetting use in the negotiation logic. `salary_date` still exists as a `memory` key, learned live and only if the borrower volunteers it during a call.
 
 ## `calls`
 
@@ -105,9 +105,7 @@ Loaded once by `seed.py` into the SQLite tables above via `INSERT OR REPLACE` - 
       "amount_collected": 0,
       "amount_promised": 0,
       "due_date": "2026-08-05",
-      "breach_date": "2026-08-10",
       "status": "new",
-      "salary_date": "5th of every month",
       "last_call_summary": "",
       "next_action_at": null,
       "next_action": "call_borrower"
@@ -127,7 +125,7 @@ Loaded once by `seed.py` into the SQLite tables above via `INSERT OR REPLACE` - 
 ## Demo Query Examples
 
 - Show all debts where `status = new`.
-- Pick the highest `amount_due` with the nearest `breach_date`.
+- Pick the highest `amount_due` with the earliest `due_date` (longest in collections).
 - Show the last call summary for the selected debt.
 - Show SMS payment links where `payment_status = sent`.
 - Show memory facts for a borrower before starting the next call.

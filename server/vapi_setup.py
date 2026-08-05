@@ -255,9 +255,8 @@ def _debt_context(debt_id: str) -> str:
         f"- If they can't pay it in one go: ${targets['due_now']:g} every {targets['cycle_days']} days, "
         f"{targets['cycles_to_clear']} payments to clear the balance.",
         f"- Hard floor ${targets['floor']:g} for this cycle. Below it: do not accept, do not counter, escalate.",
-        f"- Due date: {debt['due_date']}, breach date: {debt['breach_date']}",
+        f"- Due date: {debt['due_date']}",
         f"- Account status: {debt['status']}",
-        f"- Salary date on file: {debt['salary_date'] or 'unknown'}",
         f"- Last call summary: {debt['last_call_summary'] or '(no prior calls)'}",
         f"- Contact allowed right now: {eligibility['allowed']} ({eligibility['reason']})",
         f"- Policy: max discount {policy['max_discount_percent']:g}%, "

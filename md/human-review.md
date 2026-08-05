@@ -18,7 +18,7 @@ Human review gives the demo a believable escape hatch. It shows that the agent c
 Each escalation should include:
 
 - Debt ID and borrower name.
-- Current balance and breach date.
+- Current balance and start date.
 - Contact history.
 - Conversation transcript.
 - Agent summary.

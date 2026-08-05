@@ -25,7 +25,7 @@ Seed data for borrowers, debts, payments, and agent memory.
 
 ### Debt Prioritizer
 
-Ranks debts by urgency, breach date, amount, salary date, prior engagement, and likely payment outcome.
+Ranks debts by urgency, start date, amount, prior engagement, and likely payment outcome.
 
 ### Campaign Scheduler
 

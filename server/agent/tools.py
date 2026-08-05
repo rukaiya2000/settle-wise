@@ -138,14 +138,6 @@ def generate_offer_options(debt_id: str, borrower_can_pay_today: float | None = 
     if "error" in debt:
         return debt
     policy = effective_policy(debt, _get_policy())
-    with get_conn() as conn:
-        has_income_date = (
-            conn.execute(
-                "SELECT 1 FROM memory WHERE debt_id = ? AND key = 'salary_date' LIMIT 1", (debt_id,)
-            ).fetchone()
-            is not None
-            or bool(debt.get("salary_date"))
-        )
     # Returns the full picture (due_now, floor, offers, below_floor) rather
     # than a bare list - the agent needs the floor to know when to stop.
     return offer_engine.generate_offer_options(
@@ -153,8 +145,6 @@ def generate_offer_options(debt_id: str, borrower_can_pay_today: float | None = 
         debt["amount_collected"],
         policy,
         borrower_can_pay_today,
-        has_income_date,
-        today=get_demo_now(),
     )
 
 

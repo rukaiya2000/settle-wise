@@ -67,8 +67,8 @@ function zoneLabel(date) {
   return (parts.find((p) => p.type === "timeZoneName") || {}).value || "";
 }
 
-// due_date / breach_date are plain "YYYY-MM-DD" with no time component, so
-// they can't go through formatClock (which expects a timestamp). Parsed as
+// due_date is plain "YYYY-MM-DD" with no time component, so it can't go
+// through formatClock (which expects a timestamp). Parsed as
 // UTC and rendered as UTC so the date never shifts by a day for viewers
 // west or east of the demo timezone.
 function formatDate(iso) {
@@ -113,6 +113,19 @@ function dueClass(iso) {
   return "";
 }
 
+// due_date is the repayment cycle's start date, set once at creation and
+// never in the future - dueLabel/dueClass's "overdue" framing (built for a
+// forward-looking deadline) would misleadingly flag every debt in red the
+// day after it's added. This is a neutral "how long ago" label instead.
+function startLabel(iso) {
+  const days = daysUntil(iso);
+  if (days === null) return "";
+  const since = -days;
+  if (since <= 0) return "started today";
+  if (since === 1) return "started yesterday";
+  return `started ${since}d ago`;
+}
+
 async function loadDebts() {
   debts = await api("/api/debts");
   renderTable();
@@ -151,7 +164,7 @@ function renderTable() {
           </td>
           <td>
             ${formatDate(d.due_date)}
-            <div class="due-note ${dueClass(d.due_date)}">${dueLabel(d.due_date)}</div>
+            <div class="subtle">${startLabel(d.due_date)}</div>
           </td>
           <td>
             <span class="status ${d.status}">${d.status.replace(/_/g, " ")}</span>
@@ -277,15 +290,13 @@ async function loadProgress(debtId) {
 
   const facts = [
     ["Status", `<span class="status ${d.status}">${d.status.replace(/_/g, " ")}</span>${statusReason}`],
-    ["Due date", `${formatDate(d.due_date)} <span class="due-note ${dueClass(d.due_date)}">${dueLabel(d.due_date)}</span>`],
-    ["Breach date", `${formatDate(d.breach_date)} <span class="due-note ${dueClass(d.breach_date)}">${dueLabel(d.breach_date)}</span>`],
+    ["Start date", `${formatDate(d.due_date)} <span class="subtle">${startLabel(d.due_date)}</span>`],
     [
       "Next action",
       d.next_action
         ? `${d.next_action.replace(/_/g, " ")}${d.next_action_at ? ` <span class="subtle">${formatClock(d.next_action_at)}</span>` : ""}`
         : "<span class='subtle'>none scheduled</span>",
     ],
-    ["Salary date", d.salary_date || "<span class='subtle'>unknown</span>"],
   ];
   document.querySelector("#progFacts").innerHTML = facts
     .map(([k, v]) => `<div class="fact"><dt>${k}</dt><dd>${v}</dd></div>`)
@@ -798,8 +809,6 @@ addCustomerForm.addEventListener("submit", async (e) => {
     name: document.querySelector("#acName").value.trim(),
     phone: document.querySelector("#acPhone").value.trim(),
     amount_due: Number(document.querySelector("#acAmount").value),
-    breach_date: emptyToNull(document.querySelector("#acBreachDate").value),
-    salary_date: emptyToNull(document.querySelector("#acSalaryDate").value),
     due_now_percent: dueNowPct === null ? null : Number(dueNowPct),
     min_payment_today_percent: floorPct === null ? null : Number(floorPct),
     cycle_days: cycleDays === null ? null : Number(cycleDays),

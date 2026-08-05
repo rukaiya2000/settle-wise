@@ -24,8 +24,7 @@ Profile card/table fields:
 - borrower name
 - phone number
 - amount due
-- breach date
-- salary date, if known
+- start date (when the customer was added - the repayment cycle counts from here)
 - current status
 - last call summary
 - next action
@@ -39,15 +38,16 @@ Primary actions:
 
 ### Add Customer
 
-A small form/modal for creating a new debt profile: borrower name, phone, amount due, breach date, salary date (optional), and optional per-customer repayment terms (repayment % per cycle, floor %, cycle length in days). There is no due-date field - repayment starts the day the customer is added, using the demo clock's current date, not a manually picked one. Leaving the repayment terms blank falls back to the policy default. Submitting adds the profile to the list immediately.
+A small form/modal for creating a new debt profile: borrower name, phone, amount due, and optional per-customer repayment terms (repayment % per cycle, floor %, cycle length in days). There is no due-date, breach-date, or salary-date field - none were enforced by any code path, and pre-filling a borrower's salary date before ever speaking to them was a privacy liability with no offsetting use. Repayment starts the day the customer is added, using the demo clock's current date. Leaving the repayment terms blank falls back to the policy default. Submitting adds the profile to the list immediately.
+
+Salary date is still something the agent can learn - live, in-call, only if the borrower volunteers it - and store via `write_memory` to schedule reminders around it (see [memory-and-learning.md](./memory-and-learning.md)). That's a different, consented mechanism from a pre-filled field.
 
 Example card:
 
 ```text
 Riya Sharma
 Amount due: $850
-Breach: Aug 10
-Salary date: 5th of every month
+Started: Jul 31
 Status: Promised
 Last call: Can pay $300 today, rest after salary.
 
@@ -67,7 +67,7 @@ Status values actually produced by the backend today:
 
 Sorting:
 
-- Default sort should be breach urgency first.
+- Default sort should be earliest start date first (longest in collections without clearing).
 - Secondary sort should be amount due.
 
 Filters:
@@ -104,7 +104,7 @@ Keep the metrics few and highly relevant:
 
 Optional:
 
-- days until breach
+- days in collections (since the start date)
 - recovery percentage
 - last contact time
 - next scheduled call/reminder time
@@ -248,7 +248,7 @@ Suggested palette:
 
 The dashboard should help tell this story in under two minutes:
 
-1. Here are people with debts that will breach soon.
+1. Here are people with outstanding debts, longest-unpaid first.
 2. Pick one person and click `Run agent`.
 3. The voice agent calls and negotiates payment.
 4. SMS sends the payment link or reminder.

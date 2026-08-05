@@ -9,9 +9,7 @@
       "amount_collected": 10000,
       "amount_promised": 0,
       "due_date": "2026-08-30",
-      "breach_date": "2026-08-30",
       "status": "paid",
-      "salary_date": "28th of every month",
       "last_call_summary": "Paid the balance in full after agreeing a part payment on the 26th.",
       "next_action_at": null,
       "next_action": null
@@ -25,9 +23,7 @@
       "amount_collected": 0,
       "amount_promised": 0,
       "due_date": "2026-08-10",
-      "breach_date": "2026-08-10",
       "status": "new",
-      "salary_date": "",
       "last_call_summary": "",
       "next_action_at": "2026-07-31T09:00:00",
       "next_action": "call_borrower"

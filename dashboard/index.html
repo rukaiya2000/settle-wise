@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SettleWise</title>
-  <link rel="stylesheet" href="styles.css?v=5" />
+  <link rel="stylesheet" href="styles.css?v=7" />
 </head>
 <body>
   <header class="topbar">
@@ -29,7 +29,7 @@
           <tr>
             <th>Borrower</th>
             <th>Outstanding</th>
-            <th>Due</th>
+            <th>Start</th>
             <th>Status</th>
             <th>Next action</th>
             <th></th>
@@ -165,14 +165,6 @@
           <label for="acAmount">Amount due</label>
           <input id="acAmount" type="number" min="0.01" step="0.01" required />
         </div>
-        <div class="field">
-          <label for="acBreachDate">Breach date</label>
-          <input id="acBreachDate" type="date" />
-        </div>
-        <div class="field">
-          <label for="acSalaryDate">Salary date</label>
-          <input id="acSalaryDate" placeholder="e.g. 5th of every month" />
-        </div>
         <div class="field-group">
           <div class="field-group-label">Repayment terms <span class="subtle">(optional, defaults to policy)</span></div>
           <div class="field-row">
@@ -196,6 +188,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

@@ -18,9 +18,7 @@ CREATE TABLE IF NOT EXISTS debts (
     amount_collected REAL NOT NULL DEFAULT 0,
     amount_promised REAL NOT NULL DEFAULT 0,
     due_date TEXT,
-    breach_date TEXT,
     status TEXT NOT NULL DEFAULT 'new',
-    salary_date TEXT,
     last_call_summary TEXT DEFAULT '',
     next_action_at TEXT,
     next_action TEXT DEFAULT 'call_borrower',
@@ -113,6 +111,17 @@ def _migrate(conn):
     existing = {r[1] for r in conn.execute("PRAGMA table_info(debts)")}
     if "account_ref" not in existing:
         conn.execute("ALTER TABLE debts ADD COLUMN account_ref TEXT")
+    if "breach_date" in existing:
+        # Never enforced by any code path - just a stale field. Dropped
+        # rather than left nullable-and-unused.
+        conn.execute("ALTER TABLE debts DROP COLUMN breach_date")
+    if "salary_date" in existing:
+        # Pre-filled before ever speaking to the borrower - a privacy
+        # liability with no offsetting use (has_future_income_date in
+        # offer_engine.generate_offer_options is accepted but never read).
+        # The agent still learns and uses this live, in-call, via memory
+        # (write_memory key=salary_date) - that mechanism is unaffected.
+        conn.execute("ALTER TABLE debts DROP COLUMN salary_date")
     if "due_now_percent_override" not in existing:
         conn.execute("ALTER TABLE debts ADD COLUMN due_now_percent_override REAL")
     if "min_payment_today_percent_override" not in existing:

@@ -35,14 +35,14 @@ def seed():
         for d in data.get("debts", []):
             conn.execute(
                 """INSERT OR REPLACE INTO debts
-                (id, name, account_ref, phone, amount_due, amount_collected, amount_promised, due_date, breach_date, status,
-                 salary_date, last_call_summary, next_action_at, next_action)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (id, name, account_ref, phone, amount_due, amount_collected, amount_promised, due_date, status,
+                 last_call_summary, next_action_at, next_action)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     d["id"], d["name"], d.get("account_ref"), d["phone"], d["amount_due"],
                     d.get("amount_collected", 0), d.get("amount_promised", 0),
-                    d.get("due_date"), d.get("breach_date"), d.get("status", "new"),
-                    d.get("salary_date", ""), d.get("last_call_summary", ""),
+                    d.get("due_date"), d.get("status", "new"),
+                    d.get("last_call_summary", ""),
                     d.get("next_action_at"), d.get("next_action", "call_borrower"),
                 ),
             )

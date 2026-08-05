@@ -157,7 +157,7 @@ The voice agent should not directly edit the DB. It should call explicit tools.
 
 #### `get_debt_profile`
 
-Returns debt profile, amount due, status, breach date, salary date, and last summary.
+Returns debt profile, amount due, status, start date, and last summary.
 
 Input:
 

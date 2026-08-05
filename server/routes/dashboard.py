@@ -22,8 +22,6 @@ class DebtCreateRequest(BaseModel):
     name: str
     phone: str
     amount_due: float
-    breach_date: str | None = None
-    salary_date: str | None = None
     due_now_percent: float | None = None
     min_payment_today_percent: float | None = None
     cycle_days: int | None = None
@@ -55,7 +53,9 @@ def _validate_repayment_terms(due_now_percent: float | None, min_payment_today_p
 @router.get("/api/debts")
 def list_debts():
     with get_conn() as conn:
-        rows = conn.execute("SELECT * FROM debts ORDER BY breach_date").fetchall()
+        # Oldest start date first - longest in collections without clearing
+        # is the closest thing to "urgency" now that there's no breach date.
+        rows = conn.execute("SELECT * FROM debts ORDER BY due_date").fetchall()
     return [dict(r) for r in rows]
 
 
@@ -73,12 +73,12 @@ def create_debt(req: DebtCreateRequest):
     with get_conn() as conn:
         conn.execute(
             """INSERT INTO debts
-            (id, name, phone, amount_due, due_date, breach_date, status, salary_date, next_action,
+            (id, name, phone, amount_due, due_date, status, next_action,
              due_now_percent_override, min_payment_today_percent_override, cycle_days_override)
-            VALUES (?, ?, ?, ?, ?, ?, 'new', ?, 'call_borrower', ?, ?, ?)""",
+            VALUES (?, ?, ?, ?, ?, 'new', 'call_borrower', ?, ?, ?)""",
             (
-                debt_id, req.name, req.phone, req.amount_due, start_date, req.breach_date,
-                req.salary_date, req.due_now_percent, req.min_payment_today_percent, req.cycle_days,
+                debt_id, req.name, req.phone, req.amount_due, start_date,
+                req.due_now_percent, req.min_payment_today_percent, req.cycle_days,
             ),
         )
     with get_conn() as conn:
