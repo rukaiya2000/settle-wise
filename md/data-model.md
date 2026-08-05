@@ -20,7 +20,8 @@ Main table. One row per borrower/debt.
 | --- | --- | --- |
 | id | string | `debt_001` |
 | name | string | `Riya Sharma` |
-| phone | string | `+14155550123` |
+| account_ref | string | `SW-6693-4520` - generated server-side on creation (`SW-XXXX-XXXX`), never client-supplied. Its last 4 digits are the identity-verification secret; stripped from every agent-facing tool response |
+| phone | string | `+14155550123` - validated against an E.164-ish pattern on create/update |
 | amount_due | number | `850` |
 | amount_collected | number | `300` |
 | amount_promised | number | `550` |

@@ -40,7 +40,13 @@ Primary actions:
 
 A small form/modal for creating a new debt profile: borrower name, phone, amount due, and optional per-customer repayment terms (repayment % per cycle, floor %, cycle length in days). There is no due-date, breach-date, or salary-date field - none were enforced by any code path, and pre-filling a borrower's salary date before ever speaking to them was a privacy liability with no offsetting use. Repayment starts the day the customer is added, using the demo clock's current date. Leaving the repayment terms blank falls back to the policy default. Submitting adds the profile to the list immediately.
 
+Phone is validated on entry (must look like a real number) so a typo fails fast with a clear message instead of surfacing later as a broken call or SMS. Account reference (`SW-XXXX-XXXX`) is generated automatically - there's no field for it, since it's an internal identity-verification code, not something the operator chooses.
+
 Salary date is still something the agent can learn - live, in-call, only if the borrower volunteers it - and store via `write_memory` to schedule reminders around it (see [memory-and-learning.md](./memory-and-learning.md)). That's a different, consented mechanism from a pre-filled field.
+
+### Edit Profile / Delete Customer
+
+From the person progress page, `Edit profile` opens a form to correct name, phone, or amount due after the fact (same validation as Add Customer). Below the save button, a clearly separated "danger zone" holds `Delete customer` - permanently removes the profile and every call/SMS/memory fact tied to it, gated behind a confirmation dialog. There's no undo, so this is for cleaning up mistakes and test entries, not a routine action.
 
 Example card:
 
@@ -195,7 +201,8 @@ Minimum interactions:
 
 - Click `Add customer` and create a new profile, with or without custom repayment terms.
 - Select a person from the profiles page.
-- Edit a borrower's repayment terms on their progress page.
+- Edit a borrower's repayment terms, or their name/phone/amount due, on their progress page.
+- Delete a customer from the danger zone of the edit-profile form, with confirmation.
 - Click `Run agent` against that person.
 - Click `Retry now` if the previous call was `no_answer` or a promise was missed.
 - Advance the demo clock by `+1 hour`, `+1 day`, or `+3 days`.

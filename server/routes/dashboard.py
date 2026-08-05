@@ -1,5 +1,7 @@
 """Dashboard API backing the profiles/progress screens (md/dashboard-spec.md)."""
 
+import random
+import re
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -17,6 +19,11 @@ from ..vapi_setup import place_call
 
 router = APIRouter()
 
+# E.164-ish: optional leading +, 8-15 digits, no leading 0. Loose enough for
+# international numbers, strict enough to catch the obvious junk ("we") that
+# would otherwise reach a1mobile at call/SMS time instead of at entry.
+PHONE_RE = re.compile(r"^\+?[1-9]\d{7,14}$")
+
 
 class DebtCreateRequest(BaseModel):
     name: str
@@ -28,6 +35,9 @@ class DebtCreateRequest(BaseModel):
 
 
 class DebtUpdateRequest(BaseModel):
+    name: str | None = None
+    phone: str | None = None
+    amount_due: float | None = None
     due_now_percent: float | None = None
     min_payment_today_percent: float | None = None
     cycle_days: int | None = None
@@ -50,6 +60,22 @@ def _validate_repayment_terms(due_now_percent: float | None, min_payment_today_p
         raise HTTPException(400, "cycle_days must be a positive integer")
 
 
+def _validate_phone(phone: str):
+    if not PHONE_RE.match(phone):
+        raise HTTPException(400, "phone must look like a real number, e.g. +15551234567")
+
+
+def _generate_account_ref(conn) -> str:
+    """SW-XXXX-XXXX, matching the seeded accounts. Retried on the
+    astronomically unlikely collision rather than assumed unique."""
+    for _ in range(10):
+        candidate = f"SW-{random.randint(0, 9999):04d}-{random.randint(0, 9999):04d}"
+        exists = conn.execute("SELECT 1 FROM debts WHERE account_ref = ?", (candidate,)).fetchone()
+        if not exists:
+            return candidate
+    raise HTTPException(500, "could not generate a unique account reference")
+
+
 @router.get("/api/debts")
 def list_debts():
     with get_conn() as conn:
@@ -63,6 +89,7 @@ def list_debts():
 def create_debt(req: DebtCreateRequest):
     if req.amount_due <= 0:
         raise HTTPException(400, "amount_due must be positive")
+    _validate_phone(req.phone)
     _validate_repayment_terms(req.due_now_percent, req.min_payment_today_percent, req.cycle_days)
 
     debt_id = f"debt_{uuid.uuid4().hex[:8]}"
@@ -71,13 +98,14 @@ def create_debt(req: DebtCreateRequest):
     # count from whenever the customer is actually added.
     start_date = get_demo_now().strftime("%Y-%m-%d")
     with get_conn() as conn:
+        account_ref = _generate_account_ref(conn)
         conn.execute(
             """INSERT INTO debts
-            (id, name, phone, amount_due, due_date, status, next_action,
+            (id, name, account_ref, phone, amount_due, due_date, status, next_action,
              due_now_percent_override, min_payment_today_percent_override, cycle_days_override)
-            VALUES (?, ?, ?, ?, ?, 'new', 'call_borrower', ?, ?, ?)""",
+            VALUES (?, ?, ?, ?, ?, ?, 'new', 'call_borrower', ?, ?, ?)""",
             (
-                debt_id, req.name, req.phone, req.amount_due, start_date,
+                debt_id, req.name, account_ref, req.phone, req.amount_due, start_date,
                 req.due_now_percent, req.min_payment_today_percent, req.cycle_days,
             ),
         )
@@ -121,14 +149,31 @@ def get_debt_detail(debt_id: str):
 
 @router.post("/api/debts/{debt_id}/update")
 def update_debt(debt_id: str, req: DebtUpdateRequest):
-    """Edit an existing customer's per-cycle repayment terms. Only fields
-    present in the request body are changed (sending null clears an override
-    back to the policy default) - omitted fields keep whatever they were."""
+    """Edit an existing customer. Only fields present in the request body are
+    changed - omitted fields keep whatever they were. Repayment-term fields
+    accept an explicit null to clear an override back to the policy default;
+    name/phone/amount_due may not be nulled (there's no sensible "unset" for
+    them - reject instead of silently ignoring, so a bad request doesn't
+    look like it succeeded)."""
     fields = req.model_dump(exclude_unset=True)
+
+    for profile_field in ("name", "phone", "amount_due"):
+        if profile_field in fields and fields[profile_field] is None:
+            raise HTTPException(400, f"{profile_field} cannot be cleared")
+    if "phone" in fields:
+        _validate_phone(fields["phone"])
+    if "name" in fields and not fields["name"].strip():
+        raise HTTPException(400, "name cannot be blank")
+    if "amount_due" in fields and fields["amount_due"] <= 0:
+        raise HTTPException(400, "amount_due must be positive")
     _validate_repayment_terms(
         fields.get("due_now_percent"), fields.get("min_payment_today_percent"), fields.get("cycle_days")
     )
+
     column_map = {
+        "name": "name",
+        "phone": "phone",
+        "amount_due": "amount_due",
         "due_now_percent": "due_now_percent_override",
         "min_payment_today_percent": "min_payment_today_percent_override",
         "cycle_days": "cycle_days_override",
@@ -142,6 +187,52 @@ def update_debt(debt_id: str, req: DebtUpdateRequest):
             conn.execute(f"UPDATE debts SET {set_clause} WHERE id = ?", (*fields.values(), debt_id))
         debt = conn.execute("SELECT * FROM debts WHERE id = ?", (debt_id,)).fetchone()
     return dict(debt)
+
+
+def _delete_debt_cascade(conn, debt_id: str):
+    # SQLite doesn't enforce the debts(id) FK by default, so these won't
+    # error if skipped - but leaving them behind is silent debris that
+    # would resurface (e.g. in list_calls()) referencing a dead debt_id.
+    conn.execute("DELETE FROM calls WHERE debt_id = ?", (debt_id,))
+    conn.execute("DELETE FROM sms_messages WHERE debt_id = ?", (debt_id,))
+    conn.execute("DELETE FROM memory WHERE debt_id = ?", (debt_id,))
+    conn.execute("DELETE FROM agent_actions WHERE debt_id = ?", (debt_id,))
+    conn.execute("DELETE FROM debts WHERE id = ?", (debt_id,))
+
+
+@router.post("/api/debts/{debt_id}/delete")
+def delete_debt(debt_id: str):
+    """Permanently remove a customer and everything tied to their debt_id.
+    No soft-delete/archive - this is explicitly for cleaning up mistakes and
+    test entries, and the dashboard confirms before calling it."""
+    with get_conn() as conn:
+        existing = conn.execute("SELECT id FROM debts WHERE id = ?", (debt_id,)).fetchone()
+        if existing is None:
+            raise HTTPException(404, "not found")
+        _delete_debt_cascade(conn, debt_id)
+    return {"debt_id": debt_id, "deleted": True}
+
+
+class BulkDeleteRequest(BaseModel):
+    debt_ids: list[str]
+
+
+@router.post("/api/debts/bulk-delete")
+def bulk_delete_debts(req: BulkDeleteRequest):
+    """Same cascade as the single-customer delete, for a whole selection at
+    once. Unknown ids are skipped rather than failing the batch - the caller
+    gets back exactly which ids were actually removed."""
+    if not req.debt_ids:
+        raise HTTPException(400, "debt_ids must not be empty")
+    deleted = []
+    with get_conn() as conn:
+        for debt_id in req.debt_ids:
+            existing = conn.execute("SELECT id FROM debts WHERE id = ?", (debt_id,)).fetchone()
+            if existing is None:
+                continue
+            _delete_debt_cascade(conn, debt_id)
+            deleted.append(debt_id)
+    return {"requested": req.debt_ids, "deleted": deleted}
 
 
 @router.get("/api/debts/{debt_id}/progress")

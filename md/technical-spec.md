@@ -460,12 +460,17 @@ GET  /api/debts
 POST /api/debts
 GET  /api/debts/{debt_id}
 POST /api/debts/{debt_id}/update
+POST /api/debts/{debt_id}/delete
 POST /api/debts/{debt_id}/run-agent
 GET  /api/debts/{debt_id}/progress
 POST /api/payments/{payment_id}/mark-paid
 ```
 
-`POST /api/debts` creates a customer (name, phone, amount, dates, and optionally per-customer `due_now_percent`/`min_payment_today_percent`/`cycle_days`). `POST /api/debts/{debt_id}/update` edits those same repayment-term fields on an existing customer - only fields present in the body are changed; sending `null` clears an override back to the policy default.
+`POST /api/debts` creates a customer (name, phone, amount, and optionally per-customer `due_now_percent`/`min_payment_today_percent`/`cycle_days`). Phone is validated against an E.164-ish pattern and rejected with `400` if it doesn't look like a real number - it feeds real SMS/call delivery downstream, so bad input is caught at entry rather than failing silently at call time. `account_ref` is generated server-side (`SW-XXXX-XXXX`), never client-supplied.
+
+`POST /api/debts/{debt_id}/update` edits an existing customer - name, phone, amount_due, and/or the repayment-term fields. Only fields present in the body are changed; sending `null` clears a repayment-term override back to the policy default, but name/phone/amount_due may not be nulled (`400` if attempted - there's no sensible "unset" for them).
+
+`POST /api/debts/{debt_id}/delete` permanently deletes the customer and cascades to their `calls`, `sms_messages`, `memory`, and `agent_actions` rows. No soft-delete/archive - this is for cleaning up mistakes and test entries, and the dashboard confirms before calling it.
 
 Optional:
 

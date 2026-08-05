@@ -605,6 +605,35 @@ button.ghost {
   margin: 0 0 14px;
 }
 
+/* Deliberately separated from the save action above it, so deleting a
+   customer takes an extra deliberate step rather than sitting next to the
+   routine "Save changes" button. */
+.danger-zone {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.danger-zone-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--red);
+  margin-bottom: 6px;
+}
+
+.danger-zone p { margin: 0 0 10px; font-size: 12px; }
+
+.danger-button {
+  width: 100%;
+  background: var(--red-bg);
+  color: var(--red);
+  border-color: transparent;
+}
+
+.danger-button:hover { background: var(--red); color: #fff; }
+
 /* The payment link in the SMS feed - a button, not a link out of the app. */
 .pay-open { margin-top: 6px; }
 .pay-open button { padding: 6px 12px; font-size: 12px; }
@@ -620,6 +649,27 @@ button.ghost {
 }
 
 .view-head h1 { margin: 0; font-size: 20px; }
+
+.view-head-actions { display: flex; align-items: center; gap: 10px; }
+
+.select-col { width: 36px; text-align: center; }
+.select-col input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; }
+
+/* Row-level delete stands apart from Call/SMS in color, but stays the same
+   small size - it's a quick action, not the primary way to delete (that's
+   the confirm-gated danger zone on the profile page). */
+.row-run.row-delete { color: var(--red); border-color: var(--red-bg); }
+.row-run.row-delete:hover { background: var(--red-bg); }
+
+.row-delete-button {
+  background: var(--red-bg);
+  color: var(--red);
+  border-color: transparent;
+  font-size: 13px;
+  padding: 6px 12px;
+}
+
+.row-delete-button:hover { background: var(--red); color: #fff; }
 
 .form-modal { max-width: 460px; text-align: left; }
 

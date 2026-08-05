@@ -5,6 +5,11 @@ const money = (value) =>
 
 let debts = [];
 let demoClock = null;
+let currentDebt = null; // the debt object for whichever progress page is open
+let selectedIds = new Set(); // profiles table bulk-selection
+
+// Mirrors server/routes/dashboard.py:PHONE_RE.
+const PHONE_RE = /^\+?[1-9]\d{7,14}$/;
 
 // Mirrors server/routes/dashboard.py:_validate_repayment_terms so bad input
 // never round-trips to the server just to bounce back.
@@ -142,6 +147,13 @@ function renderTable() {
     return b.amount_due - a.amount_due;
   });
 
+  // Drop selections for anything no longer in the list (deleted elsewhere,
+  // e.g. via the row action or a demo reset) so the count stays honest.
+  const liveIds = new Set(rows.map((d) => d.id));
+  for (const id of selectedIds) {
+    if (!liveIds.has(id)) selectedIds.delete(id);
+  }
+
   document.querySelector("#debtTable").innerHTML = rows
     .map((d) => {
       const outstanding = (d.amount_due || 0) - (d.amount_collected || 0);
@@ -154,6 +166,9 @@ function renderTable() {
         : '<span class="subtle">-</span>';
       return `
         <tr class="clickable" data-id="${d.id}">
+          <td class="select-col">
+            <input type="checkbox" class="row-select" data-select="${d.id}" aria-label="Select ${d.name}" ${selectedIds.has(d.id) ? "checked" : ""} />
+          </td>
           <td>
             <div class="borrower-name">${d.name}</div>
             <div class="subtle">${d.phone}</div>
@@ -174,11 +189,28 @@ function renderTable() {
           <td>
             <button class="row-run" data-call="${d.id}">Call</button>
             <button class="row-run ghost" data-sms="${d.id}">SMS</button>
+            <button class="row-run ghost row-delete" data-delete="${d.id}">Delete</button>
           </td>
         </tr>
       `;
     })
     .join("");
+
+  updateSelectAllCheckbox();
+  updateDeleteSelectedButton();
+}
+
+function updateSelectAllCheckbox() {
+  const box = document.querySelector("#selectAllCheckbox");
+  const rowBoxes = document.querySelectorAll("#debtTable .row-select");
+  box.checked = rowBoxes.length > 0 && selectedIds.size === rowBoxes.length;
+  box.indeterminate = selectedIds.size > 0 && selectedIds.size < rowBoxes.length;
+}
+
+function updateDeleteSelectedButton() {
+  const button = document.querySelector("#deleteSelectedButton");
+  button.classList.toggle("hidden", selectedIds.size === 0);
+  button.textContent = `Delete selected (${selectedIds.size})`;
 }
 
 // "SW-6693-4520" -> "SW-••••-4520". Masks every digit but the last four,
@@ -265,6 +297,7 @@ async function loadProgress(debtId) {
     api(`/api/debts/${debtId}/progress`),
   ]);
 
+  currentDebt = detail.debt;
   document.querySelector("#progName").textContent = detail.debt.name;
   // Kept as the bare number - the call/SMS confirm dialogs read this.
   document.querySelector("#progPhone").textContent = detail.debt.phone;
@@ -572,6 +605,39 @@ function promptSms(name, phone, amountDue) {
 }
 
 document.querySelector("#debtTable").addEventListener("click", async (e) => {
+  const selectBox = e.target.closest("[data-select]");
+  if (selectBox) {
+    e.stopPropagation();
+    if (selectBox.checked) selectedIds.add(selectBox.dataset.select);
+    else selectedIds.delete(selectBox.dataset.select);
+    updateSelectAllCheckbox();
+    updateDeleteSelectedButton();
+    return;
+  }
+
+  const deleteBtn = e.target.closest("[data-delete]");
+  if (deleteBtn) {
+    e.stopPropagation();
+    const debt = debts.find((d) => d.id === deleteBtn.dataset.delete);
+    const confirmed = window.confirm(
+      `Permanently delete ${debt ? debt.name : "this borrower"}?\n\nThis removes their debt profile and every call, SMS, and memory fact tied to it. This cannot be undone.`,
+    );
+    if (!confirmed) return;
+
+    deleteBtn.disabled = true;
+    deleteBtn.textContent = "Deleting...";
+    try {
+      await api(`/api/debts/${deleteBtn.dataset.delete}/delete`, { method: "POST" });
+      selectedIds.delete(deleteBtn.dataset.delete);
+      await loadDebts();
+    } catch (err) {
+      window.alert(`Delete failed: ${err.message}`);
+      deleteBtn.disabled = false;
+      deleteBtn.textContent = "Delete";
+    }
+    return;
+  }
+
   const smsBtn = e.target.closest("[data-sms]");
   if (smsBtn) {
     e.stopPropagation();
@@ -620,6 +686,42 @@ document.querySelector("#debtTable").addEventListener("click", async (e) => {
   if (row) window.location.hash = `/${row.dataset.id}`;
 });
 
+document.querySelector("#selectAllCheckbox").addEventListener("change", (e) => {
+  const rowBoxes = document.querySelectorAll("#debtTable .row-select");
+  selectedIds = e.target.checked ? new Set([...rowBoxes].map((b) => b.dataset.select)) : new Set();
+  rowBoxes.forEach((b) => { b.checked = e.target.checked; });
+  updateDeleteSelectedButton();
+});
+
+document.querySelector("#deleteSelectedButton").addEventListener("click", async () => {
+  const ids = [...selectedIds];
+  if (!ids.length) return;
+  const names = ids.map((id) => (debts.find((d) => d.id === id) || {}).name).filter(Boolean);
+  const confirmed = window.confirm(
+    `Permanently delete ${ids.length} borrower${ids.length === 1 ? "" : "s"}?\n\n` +
+      `${names.join(", ")}\n\nThis removes each profile and every call, SMS, and memory fact tied to it. This cannot be undone.`,
+  );
+  if (!confirmed) return;
+
+  const button = document.querySelector("#deleteSelectedButton");
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = "Deleting...";
+  try {
+    const result = await api("/api/debts/bulk-delete", { method: "POST", body: JSON.stringify({ debt_ids: ids }) });
+    selectedIds = new Set();
+    await loadDebts();
+    if (result.deleted.length < result.requested.length) {
+      window.alert(`Deleted ${result.deleted.length} of ${result.requested.length} - some were already gone.`);
+    }
+  } catch (err) {
+    window.alert(`Bulk delete failed: ${err.message}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+  }
+});
+
 document.querySelector("#backButton").addEventListener("click", () => {
   window.location.hash = "";
 });
@@ -642,6 +744,10 @@ document.querySelector("#resetClock").addEventListener("click", async () => {
 });
 
 document.querySelector("#resetDemo").addEventListener("click", async () => {
+  const confirmed = window.confirm(
+    "Reset the entire demo?\n\nThis permanently deletes every customer, call, SMS, and memory fact, and restores the seed data. This cannot be undone.",
+  );
+  if (!confirmed) return;
   await api("/api/reset-demo", { method: "POST" });
   window.location.hash = "";
   await loadClock();
@@ -819,6 +925,11 @@ addCustomerForm.addEventListener("submit", async (e) => {
     addCustomerError.classList.remove("hidden");
     return;
   }
+  if (!PHONE_RE.test(body.phone)) {
+    addCustomerError.textContent = "Phone must look like a real number, e.g. +15551234567.";
+    addCustomerError.classList.remove("hidden");
+    return;
+  }
   if (!(body.amount_due > 0)) {
     addCustomerError.textContent = "Amount due must be positive.";
     addCustomerError.classList.remove("hidden");
@@ -848,10 +959,106 @@ addCustomerForm.addEventListener("submit", async (e) => {
   }
 });
 
+// ---- Edit profile / delete customer -----------------------------------
+
+const editProfileOverlay = document.querySelector("#editProfileOverlay");
+const editProfileForm = document.querySelector("#editProfileForm");
+const editProfileError = document.querySelector("#editProfileError");
+
+function openEditProfileModal() {
+  if (!currentDebt) return;
+  editProfileError.classList.add("hidden");
+  document.querySelector("#epName").value = currentDebt.name;
+  document.querySelector("#epPhone").value = currentDebt.phone;
+  document.querySelector("#epAmount").value = currentDebt.amount_due;
+  editProfileOverlay.classList.remove("hidden");
+  document.querySelector("#epName").focus();
+}
+
+function closeEditProfileModal() {
+  editProfileOverlay.classList.add("hidden");
+}
+
+document.querySelector("#editProfileButton").addEventListener("click", openEditProfileModal);
+document.querySelector("#editProfileClose").addEventListener("click", closeEditProfileModal);
+editProfileOverlay.addEventListener("click", (e) => {
+  if (e.target === editProfileOverlay) closeEditProfileModal();
+});
+
+editProfileForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  editProfileError.classList.add("hidden");
+
+  const name = document.querySelector("#epName").value.trim();
+  const phone = document.querySelector("#epPhone").value.trim();
+  const amountDue = Number(document.querySelector("#epAmount").value);
+
+  if (!name || !phone) {
+    editProfileError.textContent = "Name and phone are required.";
+    editProfileError.classList.remove("hidden");
+    return;
+  }
+  if (!PHONE_RE.test(phone)) {
+    editProfileError.textContent = "Phone must look like a real number, e.g. +15551234567.";
+    editProfileError.classList.remove("hidden");
+    return;
+  }
+  if (!(amountDue > 0)) {
+    editProfileError.textContent = "Amount due must be positive.";
+    editProfileError.classList.remove("hidden");
+    return;
+  }
+
+  const button = document.querySelector("#editProfileSave");
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = "Saving...";
+  try {
+    const debtId = window.location.hash.replace(/^#\/?/, "");
+    await api(`/api/debts/${debtId}/update`, {
+      method: "POST",
+      body: JSON.stringify({ name, phone, amount_due: amountDue }),
+    });
+    closeEditProfileModal();
+    await loadProgress(debtId);
+  } catch (err) {
+    editProfileError.textContent = `Failed to save: ${err.message}`;
+    editProfileError.classList.remove("hidden");
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+  }
+});
+
+document.querySelector("#deleteCustomerButton").addEventListener("click", async () => {
+  if (!currentDebt) return;
+  const confirmed = window.confirm(
+    `Permanently delete ${currentDebt.name}?\n\nThis removes their debt profile and every call, SMS, and memory fact tied to it. This cannot be undone.`,
+  );
+  if (!confirmed) return;
+
+  const button = document.querySelector("#deleteCustomerButton");
+  button.disabled = true;
+  button.textContent = "Deleting...";
+  try {
+    const debtId = window.location.hash.replace(/^#\/?/, "");
+    await api(`/api/debts/${debtId}/delete`, { method: "POST" });
+    closeEditProfileModal();
+    window.location.hash = "";
+    await loadDebts();
+  } catch (err) {
+    editProfileError.textContent = `Failed to delete: ${err.message}`;
+    editProfileError.classList.remove("hidden");
+    button.disabled = false;
+    button.textContent = "Delete customer";
+  }
+});
+
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   if (!payOverlay.classList.contains("hidden")) closePayModal();
   if (!addCustomerOverlay.classList.contains("hidden")) closeAddCustomerModal();
+  if (!editProfileOverlay.classList.contains("hidden")) closeEditProfileModal();
 });
 
 window.addEventListener("hashchange", route);

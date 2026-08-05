@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SettleWise</title>
-  <link rel="stylesheet" href="styles.css?v=7" />
+  <link rel="stylesheet" href="styles.css?v=9" />
 </head>
 <body>
   <header class="topbar">
@@ -22,11 +22,15 @@
     <section id="profilesView">
       <div class="view-head">
         <h1>Borrowers</h1>
-        <button id="addCustomerButton">Add customer</button>
+        <div class="view-head-actions">
+          <button id="deleteSelectedButton" class="row-delete-button hidden">Delete selected (0)</button>
+          <button id="addCustomerButton">Add customer</button>
+        </div>
       </div>
       <table class="debt-table">
         <thead>
           <tr>
+            <th class="select-col"><input type="checkbox" id="selectAllCheckbox" aria-label="Select all borrowers" /></th>
             <th>Borrower</th>
             <th>Outstanding</th>
             <th>Start</th>
@@ -51,6 +55,7 @@
         <div class="progress-actions">
           <button id="callBorrowerButton">Call borrower</button>
           <button id="smsBorrowerButton" class="ghost">Send SMS</button>
+          <button id="editProfileButton" class="ghost">Edit profile</button>
         </div>
       </div>
 
@@ -159,7 +164,7 @@
         </div>
         <div class="field">
           <label for="acPhone">Phone</label>
-          <input id="acPhone" required placeholder="+15551234567" />
+          <input id="acPhone" required placeholder="+15551234567" pattern="\+?[1-9]\d{7,14}" title="A real phone number, e.g. +15551234567" />
         </div>
         <div class="field">
           <label for="acAmount">Amount due</label>
@@ -188,6 +193,35 @@
     </div>
   </div>
 
-  <script src="app.js?v=7"></script>
+  <div id="editProfileOverlay" class="overlay hidden">
+    <div class="pay-modal form-modal" role="dialog" aria-modal="true" aria-labelledby="editProfileTitle">
+      <button class="overlay-close" id="editProfileClose" aria-label="Close">&times;</button>
+      <div class="pay-brand" id="editProfileTitle">Edit profile</div>
+      <div class="pay-sub">Repayment terms are edited separately, below.</div>
+      <form id="editProfileForm">
+        <div class="field">
+          <label for="epName">Name</label>
+          <input id="epName" required />
+        </div>
+        <div class="field">
+          <label for="epPhone">Phone</label>
+          <input id="epPhone" required pattern="\+?[1-9]\d{7,14}" title="A real phone number, e.g. +15551234567" />
+        </div>
+        <div class="field">
+          <label for="epAmount">Amount due</label>
+          <input id="epAmount" type="number" min="0.01" step="0.01" required />
+        </div>
+        <div id="editProfileError" class="pay-error hidden"></div>
+        <button type="submit" class="pay-submit" id="editProfileSave">Save changes</button>
+      </form>
+      <div class="danger-zone">
+        <div class="danger-zone-label">Danger zone</div>
+        <p class="subtle">Permanently deletes this customer and all of their calls, SMS, and memory. Cannot be undone.</p>
+        <button type="button" id="deleteCustomerButton" class="danger-button">Delete customer</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=9"></script>
 </body>
 </html>
