@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SettleWise</title>
-  <link rel="stylesheet" href="styles.css?v=10" />
+  <link rel="stylesheet" href="styles.css?v=11" />
 </head>
 <body>
   <header class="topbar">
@@ -14,7 +14,7 @@
       <span id="clockValue">--</span>
       <button data-advance="1" data-unit="day">+1 day</button>
       <button id="resetClock" class="ghost">Reset</button>
-      <button id="resetDemo" class="ghost">Reset DB</button>
+      <button id="resetDemo" class="btn-danger">Reset DB</button>
     </div>
   </header>
 
@@ -23,8 +23,8 @@
       <div class="view-head">
         <h1>Borrowers</h1>
         <div class="view-head-actions">
-          <button id="deleteSelectedButton" class="row-delete-button hidden">Delete selected (0)</button>
-          <button id="addCustomerButton">Add customer</button>
+          <button id="deleteSelectedButton" class="btn-danger row-delete-button hidden">Delete selected (0)</button>
+          <button id="addCustomerButton" class="ghost">Add customer</button>
         </div>
       </div>
       <table class="debt-table">
@@ -226,6 +226,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>

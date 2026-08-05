@@ -8,6 +8,39 @@ let demoClock = null;
 let currentDebt = null; // the debt object for whichever progress page is open
 let selectedIds = new Set(); // profiles table bulk-selection
 
+// Friendly copy for raw enum values, so the status chip and next-action text
+// read as sentences rather than a database column with underscores swapped
+// for spaces. Anything not in the map (e.g. a value a future code path
+// introduces) falls back to that swap rather than breaking.
+const STATUS_LABELS = {
+  new: "New",
+  scheduled: "Scheduled",
+  calling: "Calling",
+  no_answer: "No answer",
+  callback_requested: "Callback requested",
+  promised: "Promised to pay",
+  link_sent: "Payment link sent",
+  missed: "Payment missed",
+  paid: "Paid",
+  needs_review: "Needs review",
+};
+
+const NEXT_ACTION_LABELS = {
+  call_borrower: "Call borrower",
+  send_payment_link: "Send payment link",
+  send_sms_reminder: "Send SMS reminder",
+  check_payment_status: "Check payment status",
+  human_review: "Human review",
+};
+
+function statusLabel(status) {
+  return STATUS_LABELS[status] || status.replace(/_/g, " ");
+}
+
+function nextActionLabel(action) {
+  return action ? NEXT_ACTION_LABELS[action] || action.replace(/_/g, " ") : "";
+}
+
 // Mirrors server/routes/dashboard.py:PHONE_RE.
 const PHONE_RE = /^\+?[1-9]\d{7,14}$/;
 
@@ -162,7 +195,7 @@ function renderTable() {
         d.amount_collected > 0 ? `<div class="subtle">${money(d.amount_collected)} of ${money(d.amount_due)} paid</div>` : "";
       const nextAt = d.next_action_at ? `<div class="subtle">${formatClock(d.next_action_at)}</div>` : "";
       const nextAction = d.next_action
-        ? `${d.next_action.replace(/_/g, " ")}${nextAt}`
+        ? `${nextActionLabel(d.next_action)}${nextAt}`
         : '<span class="subtle">-</span>';
       return `
         <tr class="clickable" data-id="${d.id}">
@@ -182,7 +215,7 @@ function renderTable() {
             <div class="subtle">${startLabel(d.due_date)}</div>
           </td>
           <td>
-            <span class="status ${d.status}">${d.status.replace(/_/g, " ")}</span>
+            <span class="status ${d.status}">${statusLabel(d.status)}</span>
             ${["needs_review", "missed", "no_answer", "scheduled", "callback_requested"].includes(d.status) && d.last_call_summary ? `<div class="status-reason">${d.last_call_summary}</div>` : ""}
           </td>
           <td class="next-action">${nextAction}</td>
@@ -321,12 +354,12 @@ async function loadProgress(debtId) {
     flagged && d.last_call_summary ? `<div class="status-reason">${d.last_call_summary}</div>` : "";
 
   const facts = [
-    ["Status", `<span class="status ${d.status}">${d.status.replace(/_/g, " ")}</span>${statusReason}`],
+    ["Status", `<span class="status ${d.status}">${statusLabel(d.status)}</span>${statusReason}`],
     ["Start date", `${formatDate(d.due_date)} <span class="subtle">${startLabel(d.due_date)}</span>`],
     [
       "Next action",
       d.next_action
-        ? `${d.next_action.replace(/_/g, " ")}${d.next_action_at ? ` <span class="subtle">${formatClock(d.next_action_at)}</span>` : ""}`
+        ? `${nextActionLabel(d.next_action)}${d.next_action_at ? ` <span class="subtle">${formatClock(d.next_action_at)}</span>` : ""}`
         : "<span class='subtle'>none scheduled</span>",
     ],
   ];

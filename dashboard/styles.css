@@ -1,20 +1,36 @@
 :root {
-  --ink: #12181f;
-  --panel: #ffffff;
-  --bg: #f4f6f8;
-  --border: #e2e6ea;
-  --text: #1c2430;
-  --subtle: #6a747c;
-  --green: #1f8a4c;
-  --green-bg: #e6f6ec;
-  --blue: #2f6fce;
-  --blue-bg: #eaf1fc;
-  --amber: #b3690a;
-  --amber-bg: #fdf1e0;
-  --red: #c33a32;
-  --red-bg: #fbeae8;
-  --teal: #0f8a8a;
-  --teal-bg: #e4f5f5;
+  /* Dark-first: this is the palette, not a toggle. Every pair below is
+     WCAG-AA-verified (4.5:1 for text, 3:1 for interactive-element borders)
+     against the surface it's actually used on - see md/dashboard-spec.md
+     for the audit that drove this. */
+  --ink: #0b0d10;          /* topbar - deepest surface */
+  --bg: #14161a;           /* page background, 14.9:1 with --text */
+  --panel: #1c1f26;        /* cards, table, modals - one step up from bg */
+  --border: #262a32;       /* decorative dividers - intentionally subtle */
+  --border-strong: #626b79; /* input/interactive boundaries, 3:1+ on bg and panel */
+  --text: #e8e9eb;         /* primary text */
+  --subtle: #9aa3af;       /* secondary text, 7.1:1 on bg */
+
+  --accent: #3564c7;       /* primary button fill - white text is 5.5:1 on this */
+  --accent-text: #5b8def;  /* accent used as foreground text/links, 5.6:1 on bg */
+
+  --green: #4ade80;   --green-bg: #0f2a1b;   /* 8.8:1 */
+  --amber: #fbbf24;   --amber-bg: #332006;   /* 9.3:1 */
+  --blue: #7fa8f5;    --blue-bg: #13224a;    /* 6.5:1 */
+  --red: #fb7185;     --red-bg: #3a1015;     /* 6.2:1 */
+  --teal: #2dd4bf;    --teal-bg: #0c2b27;    /* 8.1:1 */
+
+  /* Type scale - 9 sizes, each with one job, replacing what used to be 12
+     scattered hardcoded values with no consistent logic. */
+  --fs-2xs: 11px;   /* tertiary meta: timestamps, tool names */
+  --fs-xs: 12px;    /* labels, badges, table headers */
+  --fs-sm: 13px;    /* default body/secondary text */
+  --fs-base: 14px;  /* content that wants slight emphasis over body */
+  --fs-md: 15px;    /* emphasized body, submit buttons */
+  --fs-lg: 18px;    /* card/modal headings */
+  --fs-xl: 20px;    /* view-level headings */
+  --fs-2xl: 24px;   /* page-level headings, stat values */
+  --fs-display: 36px; /* the one hero number (checkout amount) */
 }
 
 * { box-sizing: border-box; }
@@ -31,13 +47,13 @@ body {
   align-items: center;
   justify-content: space-between;
   background: var(--ink);
-  color: #fff;
+  color: var(--text);
   padding: 14px 24px;
 }
 
 .brand {
   font-weight: 700;
-  font-size: 18px;
+  font-size: var(--fs-lg);
   letter-spacing: -0.02em;
 }
 
@@ -45,46 +61,53 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 
-.clock-label {
-  color: #9aa6b2;
-}
+.clock-label { color: var(--subtle); }
 
 #clockValue {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
 
+/* ---- Buttons: three tiers, consistent everywhere ----------------------
+   Primary (bare <button>) = the routine, expected action in context.
+   Secondary (.ghost) = anything else that isn't destructive.
+   Danger (.btn-danger) = irreversible or high-consequence - always red,
+   never blends in with the buttons beside it. */
+
 button {
   font: inherit;
-  border: 1px solid #384250;
-  background: #1c2530;
+  font-size: var(--fs-sm);
+  border: 1px solid var(--accent);
+  background: var(--accent);
   color: #fff;
   padding: 6px 12px;
   border-radius: 6px;
   cursor: pointer;
 }
 
-button:hover { background: #2a3646; }
+button:hover { background: #2f59b3; border-color: #2f59b3; }
+button:disabled { opacity: 0.6; cursor: default; }
 
 button.ghost {
   background: transparent;
-  border-color: #384250;
-  color: #cfd6dd;
+  border-color: var(--border-strong);
+  color: var(--text);
 }
+
+button.ghost:hover { background: var(--panel); }
+
+.btn-danger {
+  background: var(--red-bg);
+  color: var(--red);
+  border-color: transparent;
+}
+
+.btn-danger:hover { background: var(--red); color: #fff; }
 
 #app { max-width: 1100px; margin: 0 auto; padding: 24px; }
-
-/* .ghost above is tuned for the dark topbar; inside #app the background is
-   light, so the same light-grey text would be unreadable. */
-#app button.ghost {
-  color: var(--text);
-  border-color: var(--border);
-}
-
-#app button.ghost:hover { background: #eef1f4; }
 
 .hidden { display: none !important; }
 
@@ -102,8 +125,8 @@ button.ghost {
   padding: 14px 16px;
 }
 
-.metric .value { font-size: 22px; font-weight: 700; }
-.metric .label { font-size: 12px; color: var(--subtle); text-transform: uppercase; letter-spacing: 0.04em; }
+.metric .value { font-size: var(--fs-2xl); font-weight: 700; }
+.metric .label { font-size: var(--fs-xs); color: var(--subtle); text-transform: uppercase; letter-spacing: 0.04em; }
 
 .debt-table {
   width: 100%;
@@ -116,7 +139,7 @@ button.ghost {
 
 .debt-table th {
   text-align: left;
-  font-size: 12px;
+  font-size: var(--fs-xs);
   color: var(--subtle);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -132,18 +155,18 @@ button.ghost {
 
 .debt-table tr:last-child td { border-bottom: none; }
 .debt-table tr.clickable { cursor: pointer; }
-.debt-table tr.clickable:hover { background: #fafbfc; }
+.debt-table tr.clickable:hover { background: #21252d; }
 
 .borrower-name { font-weight: 600; }
-.subtle { color: var(--subtle); font-size: 13px; }
+.subtle { color: var(--subtle); font-size: var(--fs-sm); }
 
 .status {
   display: inline-block;
   padding: 3px 9px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--fs-xs);
   font-weight: 600;
-  text-transform: capitalize;
+  text-transform: none;
 }
 
 .status.new, .status.scheduled { background: var(--blue-bg); color: var(--blue); }
@@ -154,7 +177,7 @@ button.ghost {
 .status.needs_review { background: var(--red-bg); color: var(--red); }
 
 .row-run {
-  font-size: 12px;
+  font-size: var(--fs-xs);
   padding: 5px 10px;
   white-space: nowrap;
 }
@@ -175,7 +198,7 @@ button.ghost {
   padding: 0;
   margin-left: 4px;
   background: transparent;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   color: var(--subtle);
 }
 
@@ -194,7 +217,7 @@ button.ghost {
   margin: 16px 0;
 }
 
-.progress-header h1 { margin: 0 0 4px; font-size: 24px; }
+.progress-header h1 { margin: 0 0 4px; font-size: var(--fs-2xl); }
 
 #backButton { margin-top: 8px; }
 
@@ -202,7 +225,7 @@ button.ghost {
   border-radius: 8px;
   padding: 10px 14px;
   margin-bottom: 16px;
-  font-size: 14px;
+  font-size: var(--fs-base);
   font-weight: 600;
 }
 
@@ -233,7 +256,7 @@ button.ghost {
 }
 
 .columns h3 {
-  font-size: 13px;
+  font-size: var(--fs-sm);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--subtle);
@@ -247,14 +270,14 @@ button.ghost {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 
 .feed-item .feed-title { font-weight: 600; margin-bottom: 2px; }
-.feed-item .feed-meta { color: var(--subtle); font-size: 12px; margin-bottom: 4px; }
-.feed-item a { color: var(--blue); }
+.feed-item .feed-meta { color: var(--subtle); font-size: var(--fs-xs); margin-bottom: 4px; }
+.feed-item a { color: var(--accent-text); }
 
-.feed-empty { color: var(--subtle); font-size: 13px; font-style: italic; }
+.feed-empty { color: var(--subtle); font-size: var(--fs-sm); font-style: italic; }
 
 @media (max-width: 760px) {
   .columns { grid-template-columns: 1fr; }
@@ -280,14 +303,14 @@ button.ghost {
 
 .panel-head h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--subtle);
 }
 
 .call-summary {
-  font-size: 15px;
+  font-size: var(--fs-md);
   line-height: 1.5;
   margin-bottom: 18px;
 }
@@ -301,7 +324,7 @@ button.ghost {
 }
 
 .split h4 {
-  font-size: 12px;
+  font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--subtle);
@@ -322,7 +345,7 @@ button.ghost {
   position: relative;
   padding: 0 0 14px 18px;
   border-left: 2px solid var(--border);
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 
 .step:last-child { border-left-color: transparent; padding-bottom: 0; }
@@ -335,7 +358,7 @@ button.ghost {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--border);
+  background: var(--border-strong);
 }
 
 /* A lookup and a state change read very differently - colour tells them
@@ -347,7 +370,7 @@ button.ghost {
 .step-detail { color: var(--text); opacity: 0.75; margin-top: 1px; }
 .step-tool {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
+  font-size: var(--fs-2xs);
   color: var(--subtle);
   margin-top: 2px;
 }
@@ -355,14 +378,14 @@ button.ghost {
 .transcript {
   max-height: 340px;
   overflow-y: auto;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
 }
 
 .turn { margin-bottom: 10px; }
 .turn .who {
   display: block;
-  font-size: 11px;
+  font-size: var(--fs-2xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--subtle);
@@ -377,7 +400,7 @@ button.ghost {
 /* Account reference - staff-only. Shown so whoever is testing a call knows
    which digits to give when the agent asks; the agent itself never sees it. */
 .ref-hint {
-  font-size: 12px;
+  font-size: var(--fs-xs);
   color: var(--subtle);
   margin-top: 2px;
 }
@@ -405,7 +428,7 @@ button.ghost {
 }
 
 .fact dt {
-  font-size: 11px;
+  font-size: var(--fs-2xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--subtle);
@@ -414,15 +437,15 @@ button.ghost {
 
 .fact dd {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--fs-base);
   font-weight: 600;
-  text-transform: capitalize;
+  text-transform: none;
 }
 
 /* How close a date is matters more than the date itself when triaging, so
    urgency is colour-coded rather than left for the reader to work out. */
 .due-note {
-  font-size: 12px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--subtle);
   text-transform: none;
@@ -432,8 +455,8 @@ button.ghost {
 .due-note.overdue { color: var(--red); }
 
 .next-action {
-  font-size: 13px;
-  text-transform: capitalize;
+  font-size: var(--fs-sm);
+  text-transform: none;
 }
 
 .debt-table td .subtle { text-transform: none; font-weight: 400; }
@@ -441,7 +464,7 @@ button.ghost {
 /* A status badge alone doesn't say why. Show the reason with it so
    "needs review" isn't mistaken for something about the dates next to it. */
 .status-reason {
-  font-size: 12px;
+  font-size: var(--fs-xs);
   font-weight: 400;
   color: var(--subtle);
   text-transform: none;
@@ -472,11 +495,11 @@ button.ghost {
   cursor: pointer;
   margin-top: 12px;
   padding: 8px 14px;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 600;
-  color: var(--blue);
+  color: var(--accent-text);
   background: var(--blue-bg);
-  border: 1px solid #cfe0f7;
+  border: 1px solid transparent;
   border-radius: 999px;
   list-style: none;
   display: inline-flex;
@@ -485,9 +508,7 @@ button.ghost {
   user-select: none;
 }
 
-.call-details summary:hover {
-  background: #dbe8fb;
-}
+.call-details summary:hover { background: #1a2c5c; }
 
 /* Replace the default marker with one that rotates, so the control reads the
    same in every browser. */
@@ -519,7 +540,7 @@ button.ghost {
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(18, 24, 31, 0.55);
+  background: rgba(0, 0, 0, 0.65);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -537,7 +558,7 @@ button.ghost {
   padding: 28px 24px;
   width: 100%;
   max-width: 380px;
-  box-shadow: 0 18px 48px rgba(18, 24, 31, 0.22);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
   animation: pay-in 0.16s ease-out;
 }
 
@@ -553,43 +574,44 @@ button.ghost {
   width: 28px;
   height: 28px;
   padding: 0;
-  font-size: 20px;
+  font-size: var(--fs-xl);
   line-height: 1;
   border-radius: 8px;
   background: transparent;
+  border: none;
   color: var(--subtle);
 }
 
-.overlay-close:hover { background: #eef1f4; color: var(--text); }
+.overlay-close:hover { background: var(--border); color: var(--text); }
 
-.pay-brand { font-weight: 700; font-size: 17px; letter-spacing: -0.02em; }
-.pay-sub { color: var(--subtle); font-size: 13px; margin-bottom: 20px; }
+.pay-brand { font-weight: 700; font-size: var(--fs-lg); letter-spacing: -0.02em; }
+.pay-sub { color: var(--subtle); font-size: var(--fs-sm); margin-bottom: 20px; }
 
 .pay-amount-label {
-  font-size: 11px;
+  font-size: var(--fs-2xs);
   color: var(--subtle);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 2px;
 }
 
-.pay-amount { font-size: 38px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.pay-amount { font-size: var(--fs-display); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
 
 .pay-rows { border-top: 1px solid var(--border); margin: 20px 0; padding-top: 12px; }
 
 .pay-row {
   display: flex;
   justify-content: space-between;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   padding: 4px 0;
 }
 
 .pay-row span:first-child { color: var(--subtle); }
 
-.pay-modal button.pay-submit { width: 100%; padding: 13px; font-size: 15px; }
+.pay-modal button.pay-submit { width: 100%; padding: 13px; font-size: var(--fs-md); }
 
 .pay-note {
-  font-size: 11px;
+  font-size: var(--fs-2xs);
   color: var(--subtle);
   text-align: center;
   margin-top: 12px;
@@ -601,7 +623,7 @@ button.ghost {
   color: var(--red);
   border-radius: 8px;
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   margin-top: 12px;
 }
 
@@ -613,26 +635,26 @@ button.ghost {
   border-radius: 50%;
   background: var(--green-bg);
   color: var(--green);
-  font-size: 28px;
+  font-size: var(--fs-2xl);
   line-height: 54px;
   margin: 0 auto 12px;
 }
 
-.pay-done h3 { margin: 0 0 6px; font-size: 19px; }
+.pay-done h3 { margin: 0 0 6px; font-size: var(--fs-lg); }
 
 .pay-shortfall {
   background: var(--amber-bg);
   color: var(--amber);
   border-radius: 8px;
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   margin: 0 0 14px;
 }
 
 /* The payment link in the SMS feed - a button, not a link out of the app. */
 .pay-open { margin-top: 6px; }
-.pay-open button { padding: 6px 12px; font-size: 12px; }
-.paid-tag { color: var(--green); font-size: 12px; font-weight: 600; margin-top: 6px; }
+.pay-open button { padding: 6px 12px; font-size: var(--fs-xs); }
+.paid-tag { color: var(--green); font-size: var(--fs-xs); font-weight: 600; margin-top: 6px; }
 
 /* ---- Add customer / edit repayment terms forms ---------------------- */
 
@@ -643,22 +665,17 @@ button.ghost {
   margin-bottom: 14px;
 }
 
-.view-head h1 { margin: 0; font-size: 20px; }
+.view-head h1 { margin: 0; font-size: var(--fs-xl); }
 
 .view-head-actions { display: flex; align-items: center; gap: 10px; }
 
 .select-col { width: 36px; text-align: center; }
-.select-col input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; }
+.select-col input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); }
 
 .row-delete-button {
-  background: var(--red-bg);
-  color: var(--red);
-  border-color: transparent;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   padding: 6px 12px;
 }
-
-.row-delete-button:hover { background: var(--red); color: #fff; }
 
 .form-modal { max-width: 460px; text-align: left; }
 
@@ -666,7 +683,7 @@ button.ghost {
 
 .field label {
   display: block;
-  font-size: 12px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--subtle);
   text-transform: uppercase;
@@ -677,16 +694,17 @@ button.ghost {
 .field input {
   width: 100%;
   font: inherit;
+  font-size: var(--fs-sm);
   padding: 8px 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
-  background: var(--panel);
+  background: var(--bg);
   color: var(--text);
 }
 
 .field input:focus {
   outline: none;
-  border-color: var(--blue);
+  border-color: var(--accent-text);
   box-shadow: 0 0 0 3px var(--blue-bg);
 }
 
@@ -703,7 +721,7 @@ button.ghost {
 }
 
 .field-group-label {
-  font-size: 12px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   margin-bottom: 10px;
 }
@@ -721,7 +739,7 @@ button.ghost {
   display: flex;
   flex-wrap: wrap;
   gap: 20px;
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 
 .facts-inline .term-label { color: var(--subtle); margin-right: 4px; }
@@ -734,7 +752,7 @@ button.ghost {
 .schedule { margin-top: 14px; }
 
 .schedule-summary {
-  font-size: 12px;
+  font-size: var(--fs-xs);
   color: var(--subtle);
   margin-bottom: 8px;
 }
@@ -745,7 +763,7 @@ button.ghost {
   align-items: baseline;
   padding: 7px 0;
   border-top: 1px solid var(--border);
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 
 .schedule-row:first-of-type { border-top: none; }
