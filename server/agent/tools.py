@@ -153,13 +153,15 @@ def apply_discount(debt_id: str, requested_pct: float) -> dict:
     if "error" in debt:
         return debt
     policy = _get_policy()
-    remaining = round(debt["amount_due"] - debt["amount_collected"], 2)
+    remaining = max(0.0, round(debt["amount_due"] - debt["amount_collected"], 2))
     settled = offer_engine.apply_discount(remaining, requested_pct, policy)
     if settled is None:
-        return {
-            "approved": False,
-            "reason": f"requested {requested_pct}% exceeds max {policy['max_discount_percent']}% - route to human review",
-        }
+        reason = (
+            f"requested discount cannot be negative ({requested_pct}%)"
+            if requested_pct < 0
+            else f"requested {requested_pct}% exceeds max {policy['max_discount_percent']}%"
+        )
+        return {"approved": False, "reason": f"{reason} - route to human review"}
     return {"approved": True, "settled_amount": settled}
 
 

@@ -15,9 +15,23 @@ and a flag to escalate.
 from datetime import timedelta
 
 
+def _require_policy_fields(policy: dict, *fields: str):
+    """Fail with a clear message naming the missing field, instead of a bare
+    KeyError from direct indexing further down."""
+    missing = [f for f in fields if policy.get(f) is None]
+    if missing:
+        raise ValueError(f"policy is missing required field(s): {', '.join(missing)}")
+
+
 def payment_targets(amount_due: float, amount_collected: float, policy: dict) -> dict:
     """The numbers every offer is derived from."""
-    remaining = round(amount_due - amount_collected, 2)
+    _require_policy_fields(policy, "due_now_percent", "min_payment_today_percent")
+    # Floored at 0 - amount_collected can exceed amount_due (a duplicate
+    # payment, manual overpayment, rounding drift across partial payments),
+    # and a negative "remaining" would otherwise poison every figure derived
+    # from it (negative due_now/floor, a backwards accept-range for the
+    # agent).
+    remaining = max(0.0, round(amount_due - amount_collected, 2))
     due_now = round(remaining * (policy["due_now_percent"] / 100), 2)
     return {
         "remaining": remaining,
@@ -34,6 +48,11 @@ def _schedule(due_now: float, remaining: float, cycle_days: int, start) -> list[
     plan, owed, when, n = [], remaining, start, 0
     while owed > 0.005 and n < 60:  # 60 = runaway guard, not a policy limit
         amount = round(min(due_now, owed), 2)
+        if amount <= 0:
+            # due_now can't cover any of what's left (e.g. a due_now_percent
+            # so small it rounds to zero) - stop instead of burning the
+            # runaway guard on 60 zero-amount entries that never converge.
+            break
         plan.append({"amount": amount, "on": when.strftime("%Y-%m-%d") if when else None})
         owed = round(owed - amount, 2)
         if when:
@@ -69,6 +88,7 @@ def generate_offer_options(
     has_future_income_date: bool = False,
     today=None,
 ) -> dict:
+    _require_policy_fields(policy, "max_discount_percent")
     t = payment_targets(amount_due, amount_collected, policy)
     remaining, due_now, floor, cycle_days = t["remaining"], t["due_now"], t["floor"], t["cycle_days"]
 
@@ -77,7 +97,13 @@ def generate_offer_options(
     # skipped negotiation entirely. Treat 0/None as "no figure named yet" and
     # ask them; a genuine refusal is handled by mark_needs_review, not here.
     named_amount = borrower_can_pay_today is not None and borrower_can_pay_today > 0
-    below_floor = named_amount and borrower_can_pay_today < floor
+    # An offer above the entire outstanding balance isn't a real offer to
+    # act on - cap what gets confirmed/quoted at what's actually owed rather
+    # than pass an inflated (possibly malformed) figure through to a
+    # payment link.
+    exceeds_balance = named_amount and borrower_can_pay_today > remaining
+    capped_amount = min(borrower_can_pay_today, remaining) if named_amount else borrower_can_pay_today
+    below_floor = named_amount and capped_amount < floor
 
     offers = []
     if not below_floor:
@@ -88,10 +114,10 @@ def generate_offer_options(
                 "note": "due today - ask for this. Payment is expected today, not spread over weeks.",
             }
         )
-        if named_amount and borrower_can_pay_today < due_now:
+        if named_amount and capped_amount < due_now:
             # At or above the floor but short of the cycle amount: take it and
             # carry the shortfall into this cycle.
-            amount_today = round(borrower_can_pay_today, 2)
+            amount_today = round(capped_amount, 2)
             offers.append(
                 {
                     "type": "partial",
@@ -118,6 +144,7 @@ def generate_offer_options(
         "payments_to_clear": t["cycles_to_clear"],
         "offers": offers,
         "below_floor": below_floor,
+        "exceeds_balance": exceeds_balance,
         "instruction": (
             f"They offered less than the minimum of {floor:g} for this cycle. Do not accept it, "
             "do not counter, and do not keep negotiating - say you can't agree to that on this "
@@ -129,8 +156,14 @@ def generate_offer_options(
                 f"Anything from {floor:g} up to {due_now:g} is acceptable."
                 if not named_amount
                 else (
-                    f"They can pay {borrower_can_pay_today:g}, which is acceptable. Confirm it and "
-                    f"send the payment link. Never accept less than {floor:g}."
+                    f"They offered {borrower_can_pay_today:g}, more than the {remaining:g} they actually "
+                    f"owe. Confirm {remaining:g} - the full remaining balance - and send the payment "
+                    f"link for that amount, not the figure they said."
+                    if exceeds_balance
+                    else (
+                        f"They can pay {capped_amount:g}, which is acceptable. Confirm it and "
+                        f"send the payment link. Never accept less than {floor:g}."
+                    )
                 )
             )
         ),
@@ -138,8 +171,9 @@ def generate_offer_options(
 
 
 def apply_discount(remaining: float, requested_pct: float, policy: dict) -> float | None:
-    """Returns the settled amount, or None if the request exceeds policy
-    and must go to human review."""
-    if requested_pct > policy["max_discount_percent"]:
+    """Returns the settled amount, or None if the request is negative or
+    exceeds policy and must go to human review."""
+    _require_policy_fields(policy, "max_discount_percent")
+    if requested_pct < 0 or requested_pct > policy["max_discount_percent"]:
         return None
     return round(remaining * (1 - requested_pct / 100), 2)
