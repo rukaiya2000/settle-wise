@@ -20,8 +20,8 @@ Pick a borrower on the dashboard, click **Call borrower**, and their phone
 rings. The agent:
 
 1. Confirms who it's speaking to before disclosing anything about a debt
-2. Looks up the account and states the instalment due **today** — not the
-   whole balance
+2. Looks up the account and states the instalment due **today** — one
+   cycle's worth, not the whole balance
 3. Negotiates downward if they push back, never below a hard floor
 4. Texts a real payment link the borrower can tap and pay
 5. Records the outcome, remembers useful facts (salary date, best time to
@@ -31,6 +31,12 @@ rings. The agent:
 
 Afterwards the borrower's page shows the transcript alongside **what the
 agent actually did** — a plain-English trace of every tool it called.
+
+The dashboard is also where the book is managed: add a customer (name,
+phone, amount, and optionally their own repayment terms), edit the profile
+later, or delete them and everything tied to their `debt_id`. New customers
+get a server-generated account reference and start their repayment cycle on
+the demo clock's today, so a customer added mid-demo behaves like any other.
 
 ## Try it in 30 seconds, without a phone
 
@@ -81,6 +87,19 @@ credentials as a Vapi BYO trunk works, so Vapi dials and we keep the logic.
 a1mobile's webhook at `/voice`, and our own Pipecat pipeline handles it with
 OpenAI's realtime model. Same tools, same database, different voice stack.
 
+## Repayment runs on a cycle
+
+Nobody is asked for the whole balance. `due_now_percent` of what's left is
+due now, and the same amount again every `cycle_days` until it clears — 10%
+every 5 days settles a debt in 50 days. Underneath sits a floor
+(`min_payment_today_percent` of the remaining balance) that applies to what
+they commit to *for this cycle*.
+
+The three numbers come from the policy, but any customer can override them
+from their profile page — a borrower on a tighter income can be put on 5%
+every 14 days without touching anyone else. Clear an override and it falls
+back to the policy default.
+
 ## The guardrails are code, not vibes
 
 `server/offer_engine.py` decides what's on the table. If the borrower offers
@@ -94,6 +113,13 @@ Other things learned the hard way and now fixed in code rather than prose:
   agent quoted the full balance — a real tool result, just the wrong field.
 - A borrower saying "no" isn't an offer of zero. Passing `0` used to trip
   the floor and skip negotiation entirely.
+- An offer *above* the outstanding balance is capped at what's actually
+  owed, so an inflated or malformed figure can't reach a payment link.
+- Every figure is derived from a remaining balance floored at zero. An
+  overpayment used to make `remaining` negative, which quietly inverted the
+  floor and the accept-range.
+- A negative discount percentage goes to human review rather than through,
+  same as one over the cap.
 - Tool descriptions carry the rules too, because the model reads those even
   when it skims the prompt.
 
@@ -105,10 +131,10 @@ The prompt lives at [`server/agent/prompt.md`](./server/agent/prompt.md) and
 | Path | What's in it |
 | --- | --- |
 | `server/agent/` | prompt, the 16-tool registry, tool implementations, the deterministic call simulator |
-| `server/routes/` | dashboard API, Vapi webhooks, inbound voice, SMS, mock checkout |
+| `server/routes/` | dashboard + customer CRUD API, Vapi webhooks, inbound voice, SMS, mock checkout |
 | `server/offer_engine.py` | what may be offered — the enforced limits |
 | `server/scheduler.py`, `demo_clock.py` | fake clock so 30 days replays in seconds |
-| `dashboard/` | operator UI (no build step, plain JS) |
+| `dashboard/` | operator UI — borrower list, profile, customer management (no build step, plain JS) |
 | `md/` | product and technical specs |
 
 ## The demo clock
@@ -123,9 +149,13 @@ same way every time. Real calls are never triggered this way.
 
 It's a hackathon build, and a few things are honest to say out loud:
 
-- **Identity checking is a verbal confirmation only.** An account-reference
-  check was built and then removed; third-party disclosure rules are the
-  remaining protection.
+- **Identity checking is a verbal confirmation only.** Accounts still carry
+  a reference (`SW-XXXX-XXXX`, stripped from every agent-facing tool result
+  so the agent can't leak it), but nothing challenges the borrower on it —
+  third-party disclosure rules are the remaining protection.
+- **Deleting a customer is permanent.** No soft-delete or archive: the debt
+  and its calls, SMS, memory and action trail go together. It's there to
+  clear up test entries, and the dashboard confirms first.
 - **No real money moves.** `/pay/{id}` is a mock checkout that updates the
   database.
 - **Compliance is demo-grade.** The guardrails in
