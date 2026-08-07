@@ -6,7 +6,7 @@ An AI collections agent that phones borrowers, negotiates a repayment inside
 policy limits, and turns the agreement into a payment — built as a hackathon
 demo.
 
-![SettleWise end-to-end workflow](assets/settlewise-workflow-v2.png)
+![Workflow: the ops dashboard starts a call through Vapi and a SIP trunk; the voice agent speaks but every figure comes from the tool layer over SQLite, with offer_engine enforcing the floor; it ends in an SMS payment link, a recorded payment, and a scheduled follow-up, plus a branch to human review on a dispute, refusal, or abuse.](assets/settlewise-workflow-v3.png)
 
 The interesting part isn't that it can hold a phone conversation. It's that
 **the agent can't invent anything**. Every figure it says, every offer it
