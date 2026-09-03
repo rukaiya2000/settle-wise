@@ -30,7 +30,20 @@ def seed():
     init_db()
     with open(config.SEED_PATH) as f:
         data = json.load(f)
+    _load(data)
+    print(f"Seeded {config.DB_PATH} from {config.SEED_PATH}")
 
+    # The synthetic live book (server/intelligence/synthetic.py) is loaded
+    # on top of seed.json so "Reset DB" restores a realistic book with call
+    # history, not just the two hand-written demo borrowers.
+    live_book = config.BASE_DIR / "data" / "synthetic" / "live_book.json"
+    if live_book.exists():
+        with open(live_book) as f:
+            _load(json.load(f))
+        print(f"Loaded synthetic live book from {live_book}")
+
+
+def _load(data: dict):
     with get_conn() as conn:
         for d in data.get("debts", []):
             conn.execute(
@@ -87,8 +100,6 @@ def seed():
                 "UPDATE demo_clock SET current_time = ?, timezone = ?, speed = ? WHERE id = 1",
                 (dc["current_time"], dc.get("timezone", config.DEMO_CLOCK_TIMEZONE), dc.get("speed", "paused")),
             )
-
-    print(f"Seeded {config.DB_PATH} from {config.SEED_PATH}")
 
 
 if __name__ == "__main__":

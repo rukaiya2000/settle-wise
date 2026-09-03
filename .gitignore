@@ -64,6 +64,9 @@ db.sqlite3-journal
 # SettleWise generated DB
 data/settlewise.db
 
+# SettleWise R pipeline output (regenerate with `make intelligence`)
+intelligence/output/
+
 # Flask stuff:
 instance/
 .webassets-cache

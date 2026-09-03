@@ -1,0 +1,9 @@
+{
+  "seed": 42,
+  "historical": 1000,
+  "live": 10,
+  "events": 25939,
+  "paid_rate": 0.794,
+  "review_rate": 0.299,
+  "generator_version": "synth-v1"
+}

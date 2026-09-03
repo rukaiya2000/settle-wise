@@ -185,3 +185,7 @@ def get_conn():
 
 def row_to_dict(row: sqlite3.Row | None):
     return dict(row) if row is not None else None
+
+
+def rows_to_dicts(conn, sql: str, *args) -> list[dict]:
+    return [dict(r) for r in conn.execute(sql, args).fetchall()]

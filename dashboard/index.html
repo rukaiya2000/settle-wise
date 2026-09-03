@@ -4,11 +4,17 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SettleWise</title>
-  <link rel="stylesheet" href="styles.css?v=11" />
+  <link rel="stylesheet" href="styles.css?v=12" />
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">SettleWise</div>
+    <div class="brand-wrap">
+      <div class="brand">SettleWise</div>
+      <nav class="topnav">
+        <a href="#/" data-nav="profiles">Borrowers</a>
+        <a href="#/intelligence" data-nav="intelligence">Intelligence</a>
+      </nav>
+    </div>
     <div class="clock">
       <span class="clock-label">Demo clock</span>
       <span id="clockValue">--</span>
@@ -27,6 +33,17 @@
           <button id="addCustomerButton" class="ghost">Add customer</button>
         </div>
       </div>
+      <!-- Handoff queue: every account a human needs to pick up, in one
+           place. Anyone who says "I don't want to talk to a robot" lands
+           here the moment the agent escalates. -->
+      <section id="reviewQueue" class="panel review-queue hidden">
+        <div class="panel-head">
+          <h3>Needs a human <span id="reviewCount" class="count-badge"></span></h3>
+          <span class="subtle">Escalated by the agent - no automated contact until someone here picks it up</span>
+        </div>
+        <div id="reviewList" class="review-list"></div>
+      </section>
+
       <table class="debt-table">
         <thead>
           <tr>
@@ -35,12 +52,60 @@
             <th>Outstanding</th>
             <th>Start</th>
             <th>Status</th>
+            <th>Segment</th>
             <th>Next action</th>
             <th></th>
           </tr>
         </thead>
         <tbody id="debtTable"></tbody>
       </table>
+    </section>
+
+    <section id="intelligenceView" class="hidden">
+      <div class="view-head">
+        <h1>Intelligence</h1>
+        <div class="view-head-actions">
+          <span id="intelBuildStatus" class="subtle"></span>
+          <button id="rebuildIntel" class="ghost" title="Re-extract live events and re-run the R pipeline">Rebuild</button>
+        </div>
+      </div>
+      <p class="subtle intel-intro">Analysis of the historical book in R: a behavioural similarity network, statistics that test what
+        it found, and one small model. Everything here is evidence for the agent - none of it can change an amount, a floor, or a status.</p>
+
+      <div id="intelUnavailable" class="panel hidden"></div>
+
+      <div class="metrics-row" id="intelMetrics"></div>
+
+      <div class="intel-grid">
+        <section class="panel">
+          <div class="panel-head"><h3>Behavioural similarity network</h3><span id="networkMeta" class="subtle"></span></div>
+          <canvas id="networkCanvas" width="760" height="520"></canvas>
+          <div id="networkLegend" class="network-legend"></div>
+          <div id="networkHover" class="network-hover subtle"></div>
+          <div id="networkDefinition" class="subtle network-def"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h3>Segments</h3><span class="subtle">communities found by Louvain</span></div>
+          <div id="segmentTable" class="intel-table"></div>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head"><h3>Statistical findings</h3><span class="subtle">Benjamini-Hochberg adjusted; nothing shown without its sample size and uncertainty</span></div>
+        <div id="findingsList" class="findings"></div>
+      </section>
+
+      <div class="intel-grid">
+        <section class="panel">
+          <div class="panel-head"><h3>Strategy performance</h3><span class="subtle">randomised assignment in the synthetic history</span></div>
+          <div id="strategyTable" class="intel-table"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h3>Payment model</h3><span class="subtle">chronological split; champion picked on validation</span></div>
+          <div id="modelCards" class="model-cards"></div>
+        </section>
+      </div>
     </section>
 
     <section id="progressView" class="hidden">
@@ -71,6 +136,17 @@
       <div id="callStatus" class="call-status hidden"></div>
 
       <dl class="facts" id="progFacts"></dl>
+
+      <!-- Pre-call recommendation, composed from what the R layer stored
+           for this borrower. Degrades to a one-line note when the
+           intelligence layer hasn't been built. -->
+      <section id="intelPanel" class="panel intel-panel">
+        <div class="panel-head">
+          <h3>Next best action</h3>
+          <span id="intelMeta" class="subtle"></span>
+        </div>
+        <div id="intelBody"></div>
+      </section>
 
       <section id="repaymentPanel" class="panel">
         <div class="panel-head">
@@ -226,6 +302,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=11"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>

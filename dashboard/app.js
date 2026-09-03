@@ -7,6 +7,7 @@ let debts = [];
 let demoClock = null;
 let currentDebt = null; // the debt object for whichever progress page is open
 let selectedIds = new Set(); // profiles table bulk-selection
+let intelSummary = {}; // debt_id -> {segment_label, community, payment_probability} from the R layer
 
 // Friendly copy for raw enum values, so the status chip and next-action text
 // read as sentences rather than a database column with underscores swapped
@@ -165,8 +166,11 @@ function startLabel(iso) {
 }
 
 async function loadDebts() {
-  debts = await api("/api/debts");
+  // The summary is optional: if the R layer hasn't run, the table just
+  // shows no segment badges rather than failing to load.
+  [debts, intelSummary] = await Promise.all([api("/api/debts"), api("/api/intelligence/summary").catch(() => ({}))]);
   renderTable();
+  renderReviewQueue();
 }
 
 async function loadClock() {
@@ -218,6 +222,7 @@ function renderTable() {
             <span class="status ${d.status}">${statusLabel(d.status)}</span>
             ${["needs_review", "missed", "no_answer", "scheduled", "callback_requested"].includes(d.status) && d.last_call_summary ? `<div class="status-reason">${d.last_call_summary}</div>` : ""}
           </td>
+          <td>${segmentBadge(intelSummary[d.id])}</td>
           <td class="next-action">${nextAction}</td>
           <td>
             <button class="row-run" data-call="${d.id}">Call</button>
@@ -428,6 +433,7 @@ async function loadProgress(debtId) {
     : '<div class="feed-empty">Nothing learned yet.</div>';
 
   renderLastCall(detail);
+  await loadIntelligence(debtId);
 }
 
 // Raw tool names mean nothing to someone reading the page, so each one gets a
@@ -586,6 +592,10 @@ document.querySelector("#callBorrowerButton").addEventListener("click", async (e
 function setView(view) {
   document.querySelector("#profilesView").classList.toggle("hidden", view !== "profiles");
   document.querySelector("#progressView").classList.toggle("hidden", view !== "progress");
+  document.querySelector("#intelligenceView").classList.toggle("hidden", view !== "intelligence");
+  document.querySelectorAll(".topnav a").forEach((a) => {
+    a.classList.toggle("active", a.dataset.nav === (view === "progress" ? "profiles" : view));
+  });
 }
 
 let lastRoutedHash = null;
@@ -597,7 +607,10 @@ async function route() {
     document.querySelector("#callStatus").classList.add("hidden");
   }
   lastRoutedHash = hash;
-  if (hash) {
+  if (hash === "intelligence") {
+    setView("intelligence");
+    await loadIntelligenceView();
+  } else if (hash) {
     setView("progress");
     await loadProgress(hash);
   } else {
@@ -1064,6 +1077,383 @@ document.addEventListener("keydown", (e) => {
   if (!payOverlay.classList.contains("hidden")) closePayModal();
   if (!addCustomerOverlay.classList.contains("hidden")) closeAddCustomerModal();
   if (!editProfileOverlay.classList.contains("hidden")) closeEditProfileModal();
+});
+
+// ---- Intelligence layer -----------------------------------------------
+//
+// Everything below reads /api/intelligence/*, which only ever returns what
+// the R pipeline stored. The page has to work when that pipeline has never
+// run, so every renderer has an "unavailable" branch.
+
+const pct = (v) => (v == null || Number.isNaN(Number(v)) ? "-" : `${Math.round(Number(v) * 100)}%`);
+const num = (v, d = 2) => (v == null || Number.isNaN(Number(v)) ? "-" : Number(v).toFixed(d));
+const escapeHtml = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function segmentBadge(info) {
+  if (!info || !info.segment_label) return '<span class="segment-badge none">-</span>';
+  const cls = `c${(info.community ?? 0) % 8}${info.is_bridge ? " bridge" : ""}`;
+  const prob = info.payment_probability != null ? ` title="Payment after next contact: ${pct(info.payment_probability)}"` : "";
+  return `<span class="segment-badge ${cls}"${prob}>${escapeHtml(info.segment_label)}</span>`;
+}
+
+function renderReviewQueue() {
+  const queue = debts.filter((d) => d.status === "needs_review");
+  const panel = document.querySelector("#reviewQueue");
+  panel.classList.toggle("hidden", queue.length === 0);
+  document.querySelector("#reviewCount").textContent = queue.length;
+  document.querySelector("#reviewList").innerHTML = queue
+    .map((d) => {
+      const reason = d.last_call_summary || "escalated by the agent";
+      // Only the borrower explicitly asking for a person gets the phone
+      // icon - matching on the controlled reason string mark_needs_review
+      // uses for that case (server/agent/prompt.md), not a loose keyword
+      // scan that also fires on unrelated reasons like "scheduled_human_review".
+      const wantsHuman = reason.trim().toLowerCase() === "requested human agent";
+      return `
+        <div class="review-item" data-id="${d.id}" role="button" tabindex="0">
+          <div><div class="borrower-name">${escapeHtml(d.name)}</div><div class="subtle">${money((d.amount_due || 0) - (d.amount_collected || 0))} outstanding</div></div>
+          <div class="reason${wantsHuman ? " human" : ""}">${wantsHuman ? "&#9742; " : ""}${escapeHtml(reason)}</div>
+          <div class="when">${d.next_action_at ? formatClock(d.next_action_at) : "waiting"}</div>
+          <button class="row-run" data-open="${d.id}">Open</button>
+        </div>`;
+    })
+    .join("");
+}
+
+document.querySelector("#reviewList").addEventListener("click", (e) => {
+  const item = e.target.closest("[data-id]");
+  if (item) window.location.hash = `/${item.dataset.id}`;
+});
+document.querySelector("#reviewList").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.dataset.id) window.location.hash = `/${e.target.dataset.id}`;
+});
+
+async function loadIntelligence(debtId) {
+  const body = document.querySelector("#intelBody");
+  const meta = document.querySelector("#intelMeta");
+  let intel;
+  try {
+    intel = await api(`/api/intelligence/borrowers/${debtId}`);
+  } catch (err) {
+    body.innerHTML = `<div class="intel-empty">Intelligence unavailable: ${escapeHtml(err.message)}</div>`;
+    meta.textContent = "";
+    return;
+  }
+  if (!intel.available) {
+    body.innerHTML = `<div class="intel-empty">${escapeHtml(intel.reason || "not built yet")}. The call still works without it - the offer engine, not this panel, decides what can be offered.</div>`;
+    meta.textContent = "";
+    return;
+  }
+  renderIntelPanel(intel);
+}
+
+function renderIntelPanel(intel) {
+  const rec = intel.recommendation;
+  const f = intel.features || {};
+  const seg = intel.segment;
+  const actionLabel = { call: "Call", sms: "Text the link", human_review: "Human review", none: "Nothing to do" }[rec.recommended_next_action] || rec.recommended_next_action;
+  document.querySelector("#intelMeta").textContent = `${rec.recommendation_id} · ${formatClock(rec.generated_at)}`;
+
+  const why = (rec.why || [])
+    .map((line) => {
+      const contrib = /^([+-]) /.exec(line);
+      const cls = contrib ? (contrib[1] === "+" ? "contrib-up" : "contrib-down") : "";
+      return `<li class="${cls}">${escapeHtml(line)}</li>`;
+    })
+    .join("");
+
+  const neighbors = intel.neighbors || [];
+  const paidShare = neighbors.length ? neighbors.filter((n) => n.neighbor_paid).length / neighbors.length : null;
+  const neighborRows = neighbors
+    .slice(0, 6)
+    .map(
+      (n) => `
+      <div class="neighbor">
+        <span>${escapeHtml(n.neighbor_id)} <span class="sim">sim ${num(n.similarity, 2)}</span></span>
+        <span>${segmentBadge({ segment_label: n.neighbor_segment, community: (seg && seg.community) || 0 })}</span>
+        <span class="out ${n.neighbor_paid ? "paid" : "unpaid"}">${n.neighbor_paid ? `paid in ${num(n.neighbor_days_to_payment, 0)}d` : "did not pay"}</span>
+      </div>`,
+    )
+    .join("");
+
+  document.querySelector("#intelBody").innerHTML = `
+    <div class="nba">
+      <div class="nba-main">
+        <div class="nba-headline">
+          <span class="nba-action ${rec.recommended_next_action}">${actionLabel}</span>
+          ${seg ? segmentBadge(seg) : ""}
+          ${rec.human_review_recommended && rec.recommended_next_action !== "human_review" ? '<span class="segment-badge c2">have a person ready</span>' : ""}
+        </div>
+        <div class="nba-facts">
+          <div class="nba-fact"><div class="k">Payment after next contact</div><div class="v prob">${pct(rec.predicted_payment_probability)}${rec.low_history ? '<span class="flag">little history</span>' : ""}</div></div>
+          <div class="nba-fact"><div class="k">Best window</div><div class="v">${escapeHtml(rec.recommended_contact_window)}</div></div>
+          <div class="nba-fact"><div class="k">Style</div><div class="v">${escapeHtml((rec.recommended_style || "").replace(/_/g, " "))}</div><div class="subtle">${escapeHtml(rec.style_note || "")}</div></div>
+          <div class="nba-fact"><div class="k">Picks up</div><div class="v">${pct(f.contact_success_rate)}</div><div class="subtle">${f.n_calls || 0} call${f.n_calls === 1 ? "" : "s"} so far</div></div>
+          <div class="nba-fact"><div class="k">Keeps promises</div><div class="v">${pct(f.promise_completion_rate)}</div></div>
+        </div>
+        <div class="nba-why"><h4>Why</h4><ol>${why}</ol></div>
+        <div class="nba-note">${escapeHtml(rec.note)}</div>
+      </div>
+      <div class="nba-side">
+        <h4>Borrowers like this one</h4>
+        <div class="neighbor-summary">${neighbors.length ? `${pct(paidShare)} of the ${neighbors.length} most similar historical borrowers went on to pay.` : "No similar borrowers found."}</div>
+        <div class="neighbors">${neighborRows}</div>
+        <div class="evidence-ids">evidence: ${(rec.evidence || []).map((e) => escapeHtml(e.id)).join(", ") || "none"}</div>
+      </div>
+    </div>`;
+}
+
+// ---- Intelligence view ---------------------------------------------------
+
+async function loadIntelligenceView() {
+  const unavailable = document.querySelector("#intelUnavailable");
+  let status;
+  try {
+    status = await api("/api/intelligence/status");
+  } catch (err) {
+    unavailable.classList.remove("hidden");
+    unavailable.innerHTML = `Could not reach the intelligence API: ${escapeHtml(err.message)}`;
+    return;
+  }
+  if (!status.available) {
+    unavailable.classList.remove("hidden");
+    unavailable.innerHTML = `The intelligence layer has not been built yet. Run <code>make intelligence</code> (or click Rebuild) - it extracts live events and runs the R pipeline.`;
+    document.querySelector("#intelMetrics").innerHTML = "";
+    return;
+  }
+  unavailable.classList.add("hidden");
+
+  const [portfolio, network, stats, strategies, models] = await Promise.all([
+    api("/api/intelligence/portfolio"),
+    api("/api/intelligence/network"),
+    api("/api/intelligence/statistics"),
+    api("/api/intelligence/strategies"),
+    api("/api/intelligence/models"),
+  ]);
+  renderPortfolio(portfolio, status);
+  renderNetwork(network);
+  renderSegments(stats.segments);
+  renderFindings(stats.findings);
+  renderStrategies(strategies);
+  renderModels(models);
+  document.querySelector("#intelBuildStatus").textContent = status.network ? `built ${formatClock(status.network.built_at)}` : "";
+}
+
+function renderPortfolio(p, status) {
+  const h = p.historical || {};
+  const l = p.live || {};
+  const cards = [
+    { label: "Outstanding (live book)", value: money(l.outstanding) },
+    { label: "In human review", value: String(l.in_review || 0) },
+    { label: "Historical accounts", value: String(h.n || 0) },
+    { label: "Paid (historical)", value: pct(h.payment_rate) },
+    { label: "Contact success", value: pct(h.contact_success_rate) },
+    { label: "Promise completion", value: pct(h.promise_completion_rate) },
+    { label: "Avg days to payment", value: num(h.avg_days_to_payment, 1) },
+    { label: "Escalation rate", value: pct(h.escalation_rate) },
+  ];
+  document.querySelector("#intelMetrics").innerHTML = cards
+    .map((c) => `<div class="metric"><div class="value">${c.value}</div><div class="label">${c.label}</div></div>`)
+    .join("");
+}
+
+// Read from --c0..--c7 in styles.css rather than hardcoding the palette a
+// second time - keeps the canvas/legend colors and .segment-badge.cN in sync.
+const COMMUNITY_COLORS = (() => {
+  const style = getComputedStyle(document.documentElement);
+  return Array.from({ length: 8 }, (_, i) => style.getPropertyValue(`--c${i}`).trim());
+})();
+
+function renderNetwork(net) {
+  const canvas = document.querySelector("#networkCanvas");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const nodes = net.nodes || [];
+  const edges = net.edges || [];
+  const m = net.metrics || {};
+  document.querySelector("#networkMeta").textContent = m.n_nodes
+    ? `${m.n_nodes} borrowers · ${m.n_edges} edges · ${m.n_communities} communities · modularity ${num(m.modularity, 2)} (null ${num(m.null_modularity_mean, 2)} ± ${num(m.null_modularity_sd, 2)})${m.ari_vs_truth != null ? ` · ARI vs planted ${num(m.ari_vs_truth, 2)}` : ""}`
+    : "";
+  document.querySelector("#networkDefinition").textContent = m.edge_definition ? `Edge: ${m.edge_definition}` : "";
+  if (!nodes.length) return;
+
+  // Layout came from igraph (Fruchterman-Reingold, standardised); just map
+  // it onto the canvas with a margin.
+  const xs = nodes.map((n) => n.x);
+  const ys = nodes.map((n) => n.y);
+  const [minX, maxX] = [Math.min(...xs), Math.max(...xs)];
+  const [minY, maxY] = [Math.min(...ys), Math.max(...ys)];
+  const pad = 24;
+  const sx = (x) => pad + ((x - minX) / (maxX - minX || 1)) * (W - 2 * pad);
+  const sy = (y) => pad + ((y - minY) / (maxY - minY || 1)) * (H - 2 * pad);
+  const pos = new Map(nodes.map((n) => [n.debt_id, { x: sx(n.x), y: sy(n.y), n }]));
+
+  ctx.lineWidth = 0.5;
+  ctx.strokeStyle = "rgba(154,163,175,0.12)";
+  ctx.beginPath();
+  for (const e of edges) {
+    const a = pos.get(e.source);
+    const b = pos.get(e.target);
+    if (!a || !b) continue;
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+  }
+  ctx.stroke();
+
+  for (const { x, y, n } of pos.values()) {
+    const color = COMMUNITY_COLORS[(n.community || 0) % COMMUNITY_COLORS.length];
+    const r = n.is_bridge ? 5 : 3;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = n.paid ? 0.95 : 0.55;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    if (n.is_bridge) {
+      ctx.strokeStyle = "#e8e9eb";
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+  }
+
+  const segs = net.segments || [];
+  document.querySelector("#networkLegend").innerHTML =
+    segs
+      .map((s) => `<span><i class="swatch" style="background:${COMMUNITY_COLORS[s.community % COMMUNITY_COLORS.length]}"></i>${escapeHtml(s.segment_label)} (${s.n})</span>`)
+      .join("") + '<span><i class="swatch" style="background:transparent;border:1.5px solid #e8e9eb"></i>bridge borrower (top 5% betweenness)</span><span>faded = did not pay</span>';
+
+  // Nearest-node hover, cheap enough for a thousand points.
+  const hover = document.querySelector("#networkHover");
+  canvas.onmousemove = (ev) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = ((ev.clientX - rect.left) / rect.width) * W;
+    const my = ((ev.clientY - rect.top) / rect.height) * H;
+    let best = null;
+    let bestD = 12 * 12;
+    for (const p of pos.values()) {
+      const d = (p.x - mx) ** 2 + (p.y - my) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = p.n;
+      }
+    }
+    hover.textContent = best
+      ? `${best.debt_id} · ${best.segment_label} · degree ${best.degree} · betweenness ${num(best.betweenness, 3)}${best.is_bridge ? " · bridge" : ""} · ${best.paid ? "paid" : "did not pay"}`
+      : "";
+  };
+}
+
+function renderSegments(segments) {
+  const rows = (segments || [])
+    .map(
+      (s) => `
+      <tr>
+        <td>${segmentBadge(s)}</td>
+        <td class="num">${s.n}</td>
+        <td class="num">${pct(s.contact_success_rate)}</td>
+        <td class="num">${pct(s.payment_rate)}<div class="ci">${pct(s.ci_low)}-${pct(s.ci_high)}</div></td>
+        <td>${escapeHtml(s.best_bucket || "-")}<div class="ci">${pct(s.best_bucket_rate)} pick-up</div></td>
+        <td class="num">${s.median_days_to_payment == null ? "not reached" : num(s.median_days_to_payment, 0)}</td>
+      </tr>`,
+    )
+    .join("");
+  document.querySelector("#segmentTable").innerHTML = `
+    <table>
+      <thead><tr><th>Segment</th><th class="num">n</th><th class="num">Picks up</th><th class="num">Paid (95% CI)</th><th>Best window</th><th class="num">Median days</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderFindings(findings) {
+  const fmtP = (p) => (p == null ? "-" : p < 0.001 ? "< 0.001" : num(p, 3));
+  const fmtEffect = (f) => {
+    const ci = f.ci_low != null && f.ci_high != null ? ` <span class="ci">(${num(f.ci_low, 2)}-${num(f.ci_high, 2)})</span>` : "";
+    return `${num(f.effect_size, 2)}${ci} <span class="ci">${escapeHtml(f.effect_label || "")}</span>`;
+  };
+  document.querySelector("#findingsList").innerHTML = (findings || [])
+    .map(
+      (f) => `
+      <div class="finding${f.analysis_name === "weekday" ? " null-check" : ""}">
+        <div>
+          <div class="q">${escapeHtml(f.question)}</div>
+          ${f.segment_label ? `<div class="seg">within segment: ${escapeHtml(f.segment_label)}</div>` : ""}
+          <div class="summary">${escapeHtml(f.result_summary)}</div>
+        </div>
+        <div class="method">${escapeHtml(f.method)}<br />n = ${f.sample_size}<br />effect: ${fmtEffect(f)}</div>
+        <div class="stat">
+          <div class="p">p = ${fmtP(f.p_value)}</div>
+          <div class="p subtle">adj. ${fmtP(f.p_adjusted)}</div>
+          <span class="sig ${f.significant ? "yes" : "no"}">${f.significant ? "significant" : "not significant"}</span>
+        </div>
+        <div class="limits">${escapeHtml(f.limitations)}</div>
+      </div>`,
+    )
+    .join("");
+}
+
+function renderStrategies(strategies) {
+  const rows = (strategies || [])
+    .map(
+      (s) => `
+      <tr>
+        <td>${escapeHtml(s.strategy.replace(/_/g, " "))}</td>
+        <td class="num">${s.n}</td>
+        <td class="num">${pct(s.payment_rate)}<div class="ci">${pct(s.ci_low)}-${pct(s.ci_high)}</div></td>
+        <td class="num">${num(s.avg_days_to_payment, 1)}</td>
+        <td class="num">${num(s.median_days_to_payment, 1)}</td>
+      </tr>`,
+    )
+    .join("");
+  document.querySelector("#strategyTable").innerHTML = `
+    <table>
+      <thead><tr><th>Strategy</th><th class="num">Accounts</th><th class="num">Paid (95% CI)</th><th class="num">Avg days</th><th class="num">Median days</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderModels(models) {
+  document.querySelector("#modelCards").innerHTML = (models || [])
+    .map((m) => {
+      const bins = m.calibration || [];
+      const calib = bins.length
+        ? `<div class="calib" title="Calibration: observed rate per decile of predicted probability">${bins
+            .map((b) => `<div class="bar" title="pred ${num(b.mean_pred, 2)} → observed ${num(b.observed, 2)} (n=${b.n})"><i style="height:${Math.round((b.observed || 0) * 100)}%"></i></div>`)
+            .join("")}</div>`
+        : "";
+      return `
+      <div class="model-card${m.is_champion ? " champion" : ""}">
+        <div class="name"><span>${escapeHtml(m.model_name)}</span>${m.is_champion ? '<span class="champ">champion</span>' : ""}</div>
+        <div class="metrics">
+          <span>ROC-AUC <b>${num(m.roc_auc, 3)}</b></span>
+          <span>PR-AUC <b>${num(m.pr_auc, 3)}</b></span>
+          <span>Brier <b>${num(m.brier, 3)}</b></span>
+          <span>F1 <b>${num(m.f1_at_threshold, 2)}</b> @ ${num(m.threshold, 2)}</span>
+          <span>base rate <b>${pct(m.positive_rate)}</b></span>
+          <span>test n <b>${m.n_test}</b></span>
+        </div>
+        ${calib}
+        <div class="notes">${escapeHtml(m.notes || "")}</div>
+      </div>`;
+    })
+    .join("");
+}
+
+document.querySelector("#rebuildIntel").addEventListener("click", async (e) => {
+  const button = e.target;
+  const status = document.querySelector("#intelBuildStatus");
+  button.disabled = true;
+  status.textContent = "Rebuilding - extracting live events and running the R pipeline (about a minute)...";
+  try {
+    await api("/api/intelligence/rebuild", { method: "POST" });
+    status.textContent = "Rebuilt.";
+    await loadIntelligenceView();
+  } catch (err) {
+    status.textContent = `Rebuild failed: ${err.message}`;
+  } finally {
+    button.disabled = false;
+  }
 });
 
 window.addEventListener("hashchange", route);
