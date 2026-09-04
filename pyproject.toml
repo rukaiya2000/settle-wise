@@ -1,0 +1,9 @@
+[tool.ruff]
+line-length = 210
+extend-exclude = ["intelligence/renv", ".venv"]
+
+[tool.ruff.lint]
+# Default set (pyflakes + a slice of pycodestyle) plus import hygiene (I) -
+# not opting into the stricter/stylistic rule families (docstrings,
+# annotations, etc.); this is a lint for real mistakes, not a style mandate.
+select = ["E", "F", "I", "W"]

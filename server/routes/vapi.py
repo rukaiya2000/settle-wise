@@ -26,8 +26,8 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from loguru import logger
 
 from .. import config
-from ..agent.post_call_analysis import analyze_post_call
 from ..agent import tools as agent_tools
+from ..agent.post_call_analysis import analyze_post_call
 from ..agent.tool_registry import TOOL_DEFS
 from ..db import get_conn
 from ..demo_clock import get_demo_now

@@ -17,7 +17,7 @@ N ?= 1000
 .PHONY: setup synth seed extract intelligence report test test-py test-r run all
 
 setup:
-	python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt
+	python3.11 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 	cd intelligence && $(RSCRIPT) -e 'if (!requireNamespace("renv", quietly=TRUE)) install.packages("renv", repos="https://cloud.r-project.org"); renv::restore(prompt=FALSE)'
 
 synth:

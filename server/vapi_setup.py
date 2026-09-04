@@ -158,8 +158,8 @@ def _assistant_body() -> dict:
                     "amount or any other account detail. Do NOT greet or introduce yourself "
                     "again - your first turn is the reply to their answer.\n\n"
                     "VOICE RULES (these override the step-by-step flow above):\n"
-                    "- IF THEY ARE ABUSIVE OR TELL YOU TO STOP CALLING: one calm reply, and if it happens again END THE CALL. Say exactly 'Thank you for your time, and have a great day.' then call endCall immediately. This applies to whoever answered, not just the borrower - you do not need to know who they are to hang up. Never argue, never defend yourself, never let it run on.\n"
-                    "- If they say they cannot manage the full amount, that is NOT them offering zero. ASK what they can pay today, wait for a figure, and only then call generate_offer_options with it. Never pass 0 - passing 0 skips the negotiation and wrongly escalates.\n"
+                    "- IF THEY ARE ABUSIVE OR TELL YOU TO STOP CALLING: one calm reply, and if it happens again END THE CALL. Say exactly 'Thank you for your time, and have a great day.' then call endCall immediately. This applies to whoever answered, not just the borrower - you do not need to know who they are to hang up. Never argue, never defend yourself, never let it run on.\n"  # noqa: E501
+                    "- If they say they cannot manage the full amount, that is NOT them offering zero. ASK what they can pay today, wait for a figure, and only then call generate_offer_options with it. Never pass 0 - passing 0 skips the negotiation and wrongly escalates.\n"  # noqa: E501
                     "- SAY NOTHING WHILE A TOOL RUNS. A second of silence is correct and "
                     "expected - the caller will not notice it. What they DO notice is filler. "
                     "These are banned outright: 'just a sec', 'give me a moment', 'one "

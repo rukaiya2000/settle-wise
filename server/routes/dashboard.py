@@ -7,15 +7,15 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
+from .. import offer_engine
 from ..agent import tools as agent_tools
 from ..agent.simulated_call import run_simulated_call
 from ..db import get_conn
 from ..demo_clock import get_demo_now
-from .. import offer_engine
 from ..policy import get_policy
-from .vapi import poll_vapi_call_until_ended
 from ..seed import reset_db
 from ..vapi_setup import place_call
+from .vapi import poll_vapi_call_until_ended
 
 router = APIRouter()
 

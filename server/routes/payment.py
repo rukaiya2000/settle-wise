@@ -10,9 +10,9 @@ the page swaps to a receipt without a reload.
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 
+from .. import offer_engine
 from ..agent import tools as agent_tools
 from ..db import get_conn
-from .. import offer_engine
 from ..policy import get_policy
 
 router = APIRouter()
