@@ -1,18 +1,34 @@
 """One-time Vapi setup for outbound calling, plus a dial command.
 
-Registers the a1mobile SIP credentials as a Vapi BYO SIP trunk, creates the
-tools/assistant that point back at our own webhook
+Creates the tools/assistant that point back at our own webhook
 (server/routes/vapi.py -> the shared TOOL_DEFS registry), and can then place
 an outbound call.
 
+Two ways to get a number to dial *from*:
+
+1. A Vapi-hosted number (default, recommended). Buy or import one in the
+   Vapi dashboard, then put its id in VAPI_PHONE_NUMBER_ID. `numbers`
+   lists what's already on the account so you don't have to go hunting
+   for the id. Nothing about a1mobile is involved in the outbound path.
+2. a1mobile's number over a BYO SIP trunk (`setup --a1mobile-trunk`).
+   This is the original hackathon path, kept because it's the only way
+   to dial *from* the claimed a1mobile number - but it inherits every
+   a1mobile SIP credential problem, including outbound INVITEs being
+   rejected with a 403 when the trunk registration isn't accepted.
+
+Inbound calls and SMS are unaffected either way: those still arrive via
+a1mobile's own webhook (server/routes/voice.py).
+
     .venv/bin/python -m server.vapi_setup setup
+    .venv/bin/python -m server.vapi_setup numbers
     .venv/bin/python -m server.vapi_setup call +1YOURNUMBER debt_002
 
 Needs in .env:
     VAPI_PRIVATE_KEY=...
     PUBLIC_BASE_URL=https://your-ngrok-host   (no trailing slash)
 Written back to .env by `setup`:
-    VAPI_CREDENTIAL_ID, VAPI_PHONE_NUMBER_ID, VAPI_ASSISTANT_ID
+    VAPI_ASSISTANT_ID, plus VAPI_CREDENTIAL_ID/VAPI_PHONE_NUMBER_ID when
+    --a1mobile-trunk built them.
 """
 
 import json
@@ -36,6 +52,13 @@ def _headers() -> dict:
     }
 
 
+def _get(path: str) -> dict | list:
+    r = requests.get(f"{VAPI_API}{path}", headers=_headers())
+    if not r.ok:
+        raise SystemExit(f"GET {path} failed: {r.status_code} {r.text}")
+    return r.json()
+
+
 def _post(path: str, payload: dict) -> dict:
     r = requests.post(f"{VAPI_API}{path}", headers=_headers(), json=payload)
     if not r.ok:
@@ -48,6 +71,16 @@ def _patch(path: str, payload: dict) -> dict:
     if not r.ok:
         raise SystemExit(f"PATCH {path} failed: {r.status_code} {r.text}")
     return r.json()
+
+
+def list_numbers() -> list:
+    """Every phone number on the Vapi account, so the id for
+    VAPI_PHONE_NUMBER_ID can be copied from here rather than the dashboard.
+    `provider` tells you which kind each one is: a Vapi-hosted number
+    dials out on its own, a byo-phone-number depends on the SIP trunk
+    credential it's attached to."""
+    numbers = _get("/phone-number")
+    return numbers if isinstance(numbers, list) else [numbers]
 
 
 def create_sip_trunk() -> dict:
@@ -304,34 +337,48 @@ def _append_env(values: dict):
         print(" ", line)
 
 
-def setup():
-    print("Creating SIP trunk credential...")
-    cred = create_sip_trunk()
-    print("  credential id:", cred["id"])
+def setup(a1mobile_trunk: bool = False):
+    env: dict[str, str] = {}
 
-    print("Attaching phone number", config.A1MOBILE_PHONE_NUMBER, "...")
-    number = create_phone_number(cred["id"])
-    print("  phone number id:", number["id"])
+    if a1mobile_trunk:
+        print("Creating SIP trunk credential...")
+        cred = create_sip_trunk()
+        print("  credential id:", cred["id"])
+
+        print("Attaching phone number", config.A1MOBILE_PHONE_NUMBER, "...")
+        number = create_phone_number(cred["id"])
+        print("  phone number id:", number["id"])
+        env["VAPI_CREDENTIAL_ID"] = cred["id"]
+        env["VAPI_PHONE_NUMBER_ID"] = number["id"]
 
     print("Creating assistant with", len(TOOL_DEFS), "tools ->", f"{config.PUBLIC_BASE_URL}/api/vapi/tools")
     assistant = create_assistant()
     print("  assistant id:", assistant["id"])
+    env["VAPI_ASSISTANT_ID"] = assistant["id"]
 
-    _append_env(
-        {
-            "VAPI_CREDENTIAL_ID": cred["id"],
-            "VAPI_PHONE_NUMBER_ID": number["id"],
-            "VAPI_ASSISTANT_ID": assistant["id"],
-        }
-    )
-    print("\nSetup complete. Place a call with:")
+    _append_env(env)
+
+    if not a1mobile_trunk:
+        print(
+            "\nNo phone number was created - outbound calling needs one number to dial from.\n"
+            "Buy or import one in the Vapi dashboard, then:\n"
+            "  .venv/bin/python -m server.vapi_setup numbers     # find its id\n"
+            "  # put that id in .env as VAPI_PHONE_NUMBER_ID\n"
+            "\n(Or re-run with --a1mobile-trunk to dial from the claimed a1mobile\n"
+            "number over a BYO SIP trunk instead - see this module's docstring.)"
+        )
+    print("\nThen place a call with:")
     print("  .venv/bin/python -m server.vapi_setup call +1YOURNUMBER debt_002")
 
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     if cmd == "setup":
-        setup()
+        setup(a1mobile_trunk="--a1mobile-trunk" in sys.argv)
+    elif cmd == "numbers":
+        for n in list_numbers():
+            active = "  <- current VAPI_PHONE_NUMBER_ID" if n.get("id") == config.VAPI_PHONE_NUMBER_ID else ""
+            print(f"{n.get('id')}  {n.get('number') or '(no number)'}  provider={n.get('provider')}  name={n.get('name')}{active}")
     elif cmd == "update":
         print(json.dumps({"id": update_assistant(config.VAPI_ASSISTANT_ID)["id"], "updated": True}, indent=2))
     elif cmd == "call":
@@ -339,4 +386,4 @@ if __name__ == "__main__":
         debt_id = sys.argv[3] if len(sys.argv) > 3 else None
         print(json.dumps(place_call(to, debt_id), indent=2))
     else:
-        print("Usage: python -m server.vapi_setup {setup | update | call <+1NUMBER> [debt_id]}")
+        print("Usage: python -m server.vapi_setup {setup [--a1mobile-trunk] | numbers | update | call <+1NUMBER> [debt_id]}")

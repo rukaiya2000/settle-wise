@@ -80,8 +80,19 @@ Dashboard "Call borrower"
 has no outbound calling — confirmed four ways: no dial tool in its MCP
 catalog, every REST endpoint guess 404s, Telnyx's own Dial API needs
 credentials only a1mobile holds, and a raw SIP `INVITE` never completes
-digest auth even though `REGISTER` succeeds. Registering a1mobile's SIP
-credentials as a Vapi BYO trunk works, so Vapi dials and we keep the logic.
+digest auth even though `REGISTER` succeeds. So Vapi dials and we keep the
+logic.
+
+**What Vapi dials *from* is a choice.** A Vapi-hosted number (bought or
+imported in the Vapi dashboard, its id in `VAPI_PHONE_NUMBER_ID`) is the
+simple path and involves a1mobile in the outbound leg not at all. The
+original path registered a1mobile's SIP credentials as a Vapi BYO trunk
+(`python -m server.vapi_setup setup --a1mobile-trunk`), which is the only
+way to dial *from* the claimed a1mobile number — but it inherits a1mobile's
+SIP credential problems, including outbound `INVITE`s coming back
+`403 Forbidden` when the trunk registration isn't accepted.
+`python -m server.vapi_setup numbers` lists what the account has and which
+kind each one is.
 
 **Inbound is a different path.** Someone calling the claimed number hits
 a1mobile's webhook at `/voice`, and our own Pipecat pipeline handles it with
