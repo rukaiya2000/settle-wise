@@ -94,7 +94,63 @@ def get_policy(policy_id: str | None = None) -> dict:
     return _get_policy(policy_id) if policy_id else _get_policy()
 
 
+def get_current_datetime() -> dict:
+    """The agent has no other way to know what "today", "Friday", or "next
+    week" actually is - guessing would break hard rule 1 (never state a
+    date that didn't come from a tool). Call this before naming, confirming,
+    or computing any relative date."""
+    now = get_demo_now()
+    return {
+        "now": now.isoformat(timespec="seconds"),
+        "date": now.strftime("%Y-%m-%d"),
+        "weekday": now.strftime("%A"),
+        "time": now.strftime("%H:%M"),
+    }
+
+
+def get_borrower_insights(debt_id: str) -> dict:
+    """What the R analytics layer suggests about tone and timing for this
+    borrower: a behaviour segment, a recommended conversational style, and a
+    payment-probability estimate. Guidance only - it can shape HOW you speak,
+    never what you offer. Every amount, floor, and discount still comes only
+    from generate_offer_options/apply_discount; this tool cannot change them
+    and nothing it returns overrides a hard rule."""
+    from ..intelligence.recommend import borrower_intelligence
+
+    result = borrower_intelligence(debt_id)
+    if not result.get("available"):
+        return {"available": False, "reason": result.get("reason", "not available")}
+    rec = result["recommendation"]
+    return {
+        "available": True,
+        "behavior_segment": rec.get("behavior_segment"),
+        "recommended_style": rec.get("recommended_style"),
+        "style_note": rec.get("style_note"),
+        "predicted_payment_probability": rec.get("predicted_payment_probability"),
+        "low_history": rec.get("low_history"),
+        "note": rec.get("note"),
+    }
+
+
 # --- Decision tools ------------------------------------------------------
+
+
+def verify_account_ref(debt_id: str, last4: str) -> dict:
+    """Check a caller-supplied last-4 against the real account reference
+    without ever returning the reference itself - the agent can confirm or
+    deny a match, never see or repeat the value being checked against.
+    Identity checking is otherwise verbal-only (a plain "yes I'm the
+    borrower"); use this whenever the caller offers a figure to confirm
+    it, or when you want a firmer check than a verbal yes before
+    disclosing anything sensitive."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT account_ref FROM debts WHERE id = ?", (debt_id,)).fetchone()
+    if row is None:
+        return {"error": f"No debt found for id {debt_id}"}
+    supplied_digits = "".join(ch for ch in (last4 or "") if ch.isdigit())
+    actual_digits = "".join(ch for ch in (row["account_ref"] or "") if ch.isdigit())
+    verified = len(supplied_digits) == 4 and bool(actual_digits) and supplied_digits == actual_digits[-4:]
+    return {"verified": verified}
 
 
 def _calls_today(debt_id: str, today: str) -> int:
@@ -248,6 +304,20 @@ def schedule_next_action(debt_id: str, next_action: str, next_action_at: str, re
     return {"scheduled": True, "debt_id": debt_id, "status": "scheduled", "next_action": next_action, "next_action_at": next_action_at}
 
 
+def cancel_scheduled_action(debt_id: str, reason: str = "") -> dict:
+    """Clear a previously scheduled reminder or follow-up for this debt -
+    e.g. because the borrower agreed to a new date and the old one no
+    longer applies. Call this before scheduling a replacement with
+    schedule_next_action/schedule_sms_reminder, so the old one and the new
+    one don't both fire."""
+    debt = _debt_row(debt_id)
+    if "error" in debt:
+        return debt
+    with get_conn() as conn:
+        conn.execute("UPDATE debts SET next_action = NULL, next_action_at = NULL WHERE id = ?", (debt_id,))
+    return {"debt_id": debt_id, "cancelled": True, "reason": reason}
+
+
 def update_debt_status(
     debt_id: str,
     status: str,
@@ -301,6 +371,21 @@ def mark_needs_review(debt_id: str, reason: str) -> dict:
             (f"mem_{uuid.uuid4().hex[:8]}", debt_id, memory_key, reason, _now_iso()),
         )
     return {"debt_id": debt_id, "status": "needs_review", "reason": reason}
+
+
+def record_dispute(debt_id: str, category: str, description: str, disputed_amount: float | None = None) -> dict:
+    """Escalate a debt dispute with structured detail instead of free text -
+    what's being disputed, and how much, if a figure was named. Use this
+    instead of mark_needs_review whenever the debt itself is in question
+    (wrong amount, already paid, not their debt, fraud). Always escalates;
+    never negotiate past this point on a call where the debt is disputed."""
+    reason = f"dispute [{category}]: {description}"
+    if disputed_amount is not None:
+        reason += f" - disputed amount ${disputed_amount:g}"
+    result = mark_needs_review(debt_id, reason)
+    result["category"] = category
+    result["disputed_amount"] = disputed_amount
+    return result
 
 
 # --- Internal helpers used by the scheduler/payment routes, not agent tools ---

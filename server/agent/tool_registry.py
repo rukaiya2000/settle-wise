@@ -45,11 +45,50 @@ TOOL_DEFS = [
         "fn": agent_tools.get_policy,
     },
     {
+        "name": "get_current_datetime",
+        "description": (
+            "The current date and time. Call this before naming, confirming, or computing any "
+            "relative date ('today', 'Friday', 'next week') - you have no other way to know what "
+            "'today' is, and stating one you didn't get from a tool breaks hard rule 1."
+        ),
+        "properties": {},
+        "required": [],
+        "fn": agent_tools.get_current_datetime,
+    },
+    {
+        "name": "get_borrower_insights",
+        "description": (
+            "What the analytics layer suggests about tone and timing for this borrower - a "
+            "behaviour segment, a recommended conversational style, and a payment-probability "
+            "estimate. Guidance only: it can shape HOW you speak, never what you offer. Every "
+            "amount, floor, and discount still comes only from generate_offer_options/"
+            "apply_discount."
+        ),
+        "properties": {"debt_id": {"type": "string"}},
+        "required": ["debt_id"],
+        "fn": agent_tools.get_borrower_insights,
+    },
+    {
         "name": "check_call_allowed",
         "description": "Check whether it is allowed to discuss this debt with the borrower right now.",
         "properties": {"debt_id": {"type": "string"}},
         "required": ["debt_id"],
         "fn": agent_tools.check_call_allowed,
+    },
+    {
+        "name": "verify_account_ref",
+        "description": (
+            "Check a caller-supplied last-4 digits against the real account reference, without "
+            "ever revealing the reference yourself - you get back verified true/false, nothing "
+            "else. Identity is otherwise a verbal 'yes I'm the borrower'; use this for a firmer "
+            "check when it matters, or whenever the caller offers a figure to confirm."
+        ),
+        "properties": {
+            "debt_id": {"type": "string"},
+            "last4": {"type": "string", "description": "The last 4 digits the caller gave you."},
+        },
+        "required": ["debt_id", "last4"],
+        "fn": agent_tools.verify_account_ref,
     },
     {
         "name": "generate_offer_options",
@@ -150,6 +189,20 @@ TOOL_DEFS = [
         "fn": agent_tools.schedule_next_action,
     },
     {
+        "name": "cancel_scheduled_action",
+        "description": (
+            "Clear a previously scheduled reminder or follow-up for this debt - e.g. the borrower "
+            "agreed to a new date and the old one no longer applies. Call before booking a "
+            "replacement with schedule_next_action/schedule_sms_reminder so both don't fire."
+        ),
+        "properties": {
+            "debt_id": {"type": "string"},
+            "reason": {"type": "string"},
+        },
+        "required": ["debt_id"],
+        "fn": agent_tools.cancel_scheduled_action,
+    },
+    {
         "name": "update_debt_status",
         "description": "Update the debt's status and/or next action.",
         "properties": {
@@ -191,12 +244,37 @@ TOOL_DEFS = [
     },
     {
         "name": "mark_needs_review",
-        "description": "Stop collection and escalate this debt to human review (dispute, fraud, wrong party, hardship, low confidence, abusive borrower, out-of-policy settlement).",
+        "description": (
+            "Stop collection and escalate this debt to human review (hardship, low confidence, "
+            "abusive borrower, out-of-policy settlement, or anything else needing a human). Use "
+            "record_dispute instead when the debt itself is what's in question - wrong amount, "
+            "already paid, wrong person, or fraud."
+        ),
         "properties": {
             "debt_id": {"type": "string"},
             "reason": {"type": "string"},
         },
         "required": ["debt_id", "reason"],
         "fn": agent_tools.mark_needs_review,
+    },
+    {
+        "name": "record_dispute",
+        "description": (
+            "Escalate a debt dispute with structured detail instead of free text - what's being "
+            "disputed, and how much if a figure was named. Use this instead of mark_needs_review "
+            "whenever the debt itself is in question (wrong amount, already paid, not their debt, "
+            "fraud). Always escalates; never negotiate past this point on a disputed call."
+        ),
+        "properties": {
+            "debt_id": {"type": "string"},
+            "category": {
+                "type": "string",
+                "enum": ["wrong_amount", "already_paid", "not_my_debt", "fraud", "other"],
+            },
+            "description": {"type": "string"},
+            "disputed_amount": {"type": "number", "description": "A specific figure the borrower disputes, if they named one."},
+        },
+        "required": ["debt_id", "category", "description"],
+        "fn": agent_tools.record_dispute,
     },
 ]
