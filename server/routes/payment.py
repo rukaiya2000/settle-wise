@@ -67,6 +67,21 @@ def _receipt(amount: float, name: str) -> str:
   </div></body></html>"""
 
 
+def _superseded_page() -> str:
+    """Shown when an older link is opened after the amount was renegotiated
+    and a newer link replaced it - paying the stale one would collect an
+    amount nobody agreed to."""
+    return f"""<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Link expired - SettleWise</title><style>{PAGE_CSS}</style></head><body>
+  <div class="card">
+    <div class="brand">SettleWise</div>
+    <p>This payment link has been replaced by a newer one.</p>
+    <p class="muted">Please use the most recent link we sent you. If you're not sure which that is, contact us and we'll resend it.</p>
+  </div>
+</body></html>"""
+
+
 @router.get("/pay/{payment_id}", response_class=HTMLResponse)
 def pay_page(payment_id: str):
     sms = _find_sms_by_payment_id(payment_id)
@@ -79,6 +94,9 @@ def pay_page(payment_id: str):
 
     if sms["payment_status"] == "paid":
         return _receipt(amount, name)
+
+    if sms["payment_status"] == "superseded":
+        return _superseded_page()
 
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -142,6 +160,11 @@ def complete_payment(payment_id: str):
     if sms["payment_status"] == "paid":
         # Tapping twice must not collect twice.
         return {"payment_id": payment_id, "status": "already_paid"}
+    if sms["payment_status"] == "superseded":
+        # A newer link replaced this one (the amount was renegotiated after
+        # it was sent); collecting on the stale figure would take money
+        # nobody agreed to.
+        raise HTTPException(409, "This payment link has been replaced by a newer one.")
 
     # What was actually due this cycle, computed BEFORE the payment lands -
     # if they paid the floor rather than the full due_now, the diff is what's

@@ -9,6 +9,7 @@ own reasoning - every action here is a DB read/write, so the conversation
 stays auditable and can't hallucinate numbers.
 """
 
+import math
 import uuid
 
 from .. import a1mobile_client, config, offer_engine
@@ -253,10 +254,34 @@ def send_sms_payment_link(debt_id: str, amount: float, reason: str = "", live: b
     agreed to pay must actually receive the link. The simulator and the
     demo-clock scheduler leave it None, falling back to A1MOBILE_LIVE_SMS,
     so replaying 30 days of activity never texts anyone.
+
+    The amount is validated here rather than trusted. offer_engine caps what
+    may be *offered*, but this function is what actually mints a payable
+    link, and /pay/{id} hands whatever it finds straight to mark_paid - so
+    an unchecked figure here writes directly to the borrower's balance. A
+    negative amount would increase the debt; one above the balance would
+    settle it outright.
+
+    Issuing a link also supersedes any earlier unpaid one on the account:
+    otherwise a renegotiation mid-call leaves two live links (agreeing to
+    $200 then $100 left both payable, for $300 against a $139 instalment).
     """
     debt = _debt_row(debt_id)
     if "error" in debt:
         return debt
+
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return {"error": f"amount must be a number, got {amount!r}"}
+    if not math.isfinite(amount) or amount <= 0:
+        return {"error": f"amount must be a positive number, got {amount!r} - no link created"}
+
+    outstanding = max(0.0, round(debt["amount_due"] - debt["amount_collected"], 2))
+    if outstanding <= 0:
+        return {"error": "nothing is outstanding on this account - no link created"}
+    clamped_to_balance = amount > outstanding
+    amount = round(min(amount, outstanding), 2)
 
     payment_id = f"pay_{uuid.uuid4().hex[:8]}"
     link_path = f"/pay/{payment_id}"
@@ -265,6 +290,11 @@ def send_sms_payment_link(debt_id: str, amount: float, reason: str = "", live: b
 
     sms_id = f"sms_{uuid.uuid4().hex[:8]}"
     with get_conn() as conn:
+        superseded = conn.execute(
+            "UPDATE sms_messages SET payment_status = 'superseded' "
+            "WHERE debt_id = ? AND type = 'payment_link' AND payment_status = 'sent'",
+            (debt_id,),
+        ).rowcount
         conn.execute(
             """INSERT INTO sms_messages (id, debt_id, payment_id, sent_at, type, amount, body, payment_link, payment_status)
             VALUES (?, ?, ?, ?, 'payment_link', ?, ?, ?, 'sent')""",
@@ -277,7 +307,19 @@ def send_sms_payment_link(debt_id: str, amount: float, reason: str = "", live: b
         a1mobile_client.send_sms(to=debt["phone"], body=body)
         sent_live = True
 
-    return {"sms_id": sms_id, "payment_id": payment_id, "payment_link": link_path, "payment_status": "sent", "sent_live": sent_live}
+    result = {
+        "sms_id": sms_id,
+        "payment_id": payment_id,
+        "payment_link": link_path,
+        "amount": amount,
+        "payment_status": "sent",
+        "sent_live": sent_live,
+    }
+    if clamped_to_balance:
+        result["note"] = f"asked for more than the ${outstanding:g} outstanding - the link is for ${amount:g}, the full remaining balance."
+    if superseded and superseded > 0:
+        result["superseded_previous_links"] = superseded
+    return result
 
 
 def schedule_sms_reminder(debt_id: str, send_at: str, message_type: str = "reminder") -> dict:
@@ -395,6 +437,17 @@ def mark_paid(debt_id: str, amount: float, sms_id: str | None = None) -> dict:
     debt = _debt_row(debt_id)
     if "error" in debt:
         return debt
+    # Last gate before money is written to the balance, covering every
+    # caller (checkout, the simulator, the REST alias). A negative amount
+    # here would *raise* what the borrower owes. Overpayment is deliberately
+    # still allowed - duplicate payments and rounding drift are real, and
+    # offer_engine already floors the remaining balance at zero.
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return {"error": f"amount must be a number, got {amount!r}"}
+    if not math.isfinite(amount) or amount <= 0:
+        return {"error": f"payment amount must be positive, got {amount!r} - nothing recorded"}
     amount_collected = round(debt["amount_collected"] + amount, 2)
     amount_promised = max(0.0, round(debt["amount_promised"] - amount, 2))
     status = "paid" if amount_collected >= debt["amount_due"] else debt["status"]
