@@ -192,6 +192,10 @@ run_network <- function(feats, borrowers) {
   write_table("graph_nodes", nodes_out)
   write_table("graph_edges", edges)
   write_table("network_metrics", metrics)
-  saveRDS(list(graph = g, membership = membership, Z = Z, node_tbl = node_tbl, profiles = profiles, null_mod = null_mod), file.path(OUTPUT_DIR, "network.rds"))
+  # Mirror the in-memory return value below field-for-field: 04_model.R's
+  # live-prediction block reads net$segments, which only exists here when
+  # this run was cached and reloaded (e.g. `Rscript run_all.R model` alone)
+  # rather than freshly computed in the same session.
+  saveRDS(list(graph = g, segments = segments, membership = membership, Z = Z, node_tbl = node_tbl, profiles = profiles, null_mod = null_mod), file.path(OUTPUT_DIR, "network.rds"))
   list(graph = g, segments = segments, profiles = profiles, node_tbl = node_tbl, metrics = metrics, Z = Z, null_mod = null_mod)
 }

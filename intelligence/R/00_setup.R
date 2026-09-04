@@ -21,6 +21,15 @@ suppressPackageStartupMessages({
 PROJECT_ROOT <- normalizePath(getwd(), mustWork = FALSE)
 if (basename(PROJECT_ROOT) == "intelligence") PROJECT_ROOT <- dirname(PROJECT_ROOT)
 DB_PATH <- Sys.getenv("DB_PATH", file.path(PROJECT_ROOT, "data", "settlewise.db"))
+# .env/.env.example ship DB_PATH as "./data/settlewise.db" - correct for the
+# Python process, which always runs from the repo root, but this same env
+# var is inherited verbatim when the FastAPI /rebuild route spawns `make
+# intelligence` as a subprocess, and by then the Makefile has already `cd
+# intelligence`'d - a relative DB_PATH silently resolves against the wrong
+# directory ("unable to open database file"). Anchor it to PROJECT_ROOT
+# whenever it isn't already absolute, regardless of where this process's
+# cwd happens to be.
+if (!grepl("^(/|[A-Za-z]:)", DB_PATH)) DB_PATH <- file.path(PROJECT_ROOT, DB_PATH)
 SYNTH_DIR <- file.path(PROJECT_ROOT, "data", "synthetic")
 OUTPUT_DIR <- file.path(PROJECT_ROOT, "intelligence", "output")
 dir.create(OUTPUT_DIR, showWarnings = FALSE, recursive = TRUE)

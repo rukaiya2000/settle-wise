@@ -151,8 +151,14 @@ best_threshold <- function(y, p) {
 calibration_bins <- function(y, p, bins = 10) {
   q <- unique(quantile(p, probs = seq(0, 1, length.out = bins + 1)))
   b <- cut(p, q, include.lowest = TRUE)
-  tibble(bin = as.integer(b), mean_pred = tapply(p, b, mean), observed = tapply(y, b, mean), n = as.integer(table(b))) %>%
-    filter(!is.na(bin)) %>% distinct(bin, .keep_all = TRUE)
+  # One row per observation first (bin/pred/obs all the same length), then
+  # collapse to one row per bin - tapply()'s per-group results can't be
+  # mixed into the same tibble() call as the per-observation `bin` column,
+  # they only ever have as many entries as there are distinct bins.
+  tibble(bin = as.integer(b), pred = p, obs = y) %>%
+    filter(!is.na(bin)) %>%
+    group_by(bin) %>%
+    summarise(mean_pred = mean(pred), observed = mean(obs), n = n(), .groups = "drop")
 }
 
 run_model <- function(ctx, net) {
@@ -203,10 +209,15 @@ run_model <- function(ctx, net) {
   set.seed(SEED)
   dtr <- xgb.DMatrix(Xtr, label = tr$label); dva <- xgb.DMatrix(Xva, label = va$label)
   bst <- xgb.train(params = list(objective = "binary:logistic", eval_metric = "aucpr", max_depth = 3, eta = 0.05, subsample = 0.8, colsample_bytree = 0.8, min_child_weight = 5),
-                   data = dtr, nrounds = 600, watchlist = list(valid = dva), early_stopping_rounds = 40, verbose = 0)
+                   data = dtr, nrounds = 600, evals = list(valid = dva), early_stopping_rounds = 40, verbose = 0)
   p_va <- predict(bst, Xva); p_te <- predict(bst, Xte)
   th <- best_threshold(va$label, p_va)
-  registry$xgb <- metrics_at(te$label, p_te, th) %>% mutate(model_version = paste0(MODEL_VERSION, "-xgboost"), model_name = "Gradient-boosted trees", notes = sprintf("depth 3, eta 0.05, %d rounds (early-stopped on validation PR-AUC).", bst$best_iteration))
+  # xgboost >=3 replaced the old list-style xgb.Booster ($best_iteration,
+  # $niter, ...) with an opaque pointer object - those fields silently
+  # return character(0) via `$` now instead of erroring, so read attributes
+  # through the accessor instead.
+  best_iter <- xgb.attr(bst, "best_iteration")
+  registry$xgb <- metrics_at(te$label, p_te, th) %>% mutate(model_version = paste0(MODEL_VERSION, "-xgboost"), model_name = "Gradient-boosted trees", notes = sprintf("depth 3, eta 0.05, %d rounds (early-stopped on validation PR-AUC).", as.integer(best_iter)))
   va_pr["xgb"] <- pr_auc_vec(factor(va$label, levels = c(1, 0)), p_va)
   preds_test$xgb <- p_te
 
