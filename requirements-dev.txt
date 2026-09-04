@@ -1,4 +1,0 @@
-# Test-only dependencies. `make setup` installs this alongside
-# requirements.txt; the runtime app itself needs none of it.
--r requirements.txt
-pytest==9.1.1

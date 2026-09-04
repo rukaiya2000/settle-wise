@@ -8,3 +8,4 @@ requests==2.34.2
 python-dotenv==1.2.2
 pipecat-ai[openai,silero,webrtc]==1.6.0
 websockets==17.0.1
+pytest==9.1.1
