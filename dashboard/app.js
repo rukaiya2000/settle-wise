@@ -1307,7 +1307,7 @@ function renderNetwork(net) {
   const pos = new Map(nodes.map((n) => [n.debt_id, { x: sx(n.x), y: sy(n.y), n }]));
 
   ctx.lineWidth = 0.5;
-  ctx.strokeStyle = "rgba(154,163,175,0.12)";
+  ctx.strokeStyle = "rgba(60,70,85,0.16)";
   ctx.beginPath();
   for (const e of edges) {
     const a = pos.get(e.source);
@@ -1328,7 +1328,7 @@ function renderNetwork(net) {
     ctx.fill();
     ctx.globalAlpha = 1;
     if (n.is_bridge) {
-      ctx.strokeStyle = "#e8e9eb";
+      ctx.strokeStyle = themeColor("--text");
       ctx.lineWidth = 1.2;
       ctx.stroke();
     }
@@ -1338,7 +1338,7 @@ function renderNetwork(net) {
   document.querySelector("#networkLegend").innerHTML =
     segs
       .map((s) => `<span><i class="swatch" style="background:${COMMUNITY_COLORS[s.community % COMMUNITY_COLORS.length]}"></i>${escapeHtml(s.segment_label)} (${s.n})</span>`)
-      .join("") + '<span><i class="swatch" style="background:transparent;border:1.5px solid #e8e9eb"></i>bridge borrower (top 5% betweenness)</span><span>faded = did not pay</span>';
+      .join("") + '<span><i class="swatch" style="background:transparent;border:1.5px solid ' + themeColor("--text") + '"></i>bridge borrower (top 5% betweenness)</span><span>faded = did not pay</span>';
 
   // Nearest-node hover, cheap enough for a thousand points.
   const hover = document.querySelector("#networkHover");
@@ -1399,7 +1399,7 @@ function renderRobustness(data) {
   const sx = (f) => padL + (f / maxX) * (W - padL - padR);
   const sy = (v) => padT + (1 - v) * (H - padT - padB);
 
-  ctx.strokeStyle = "rgba(154,163,175,0.14)";
+  ctx.strokeStyle = "rgba(60,70,85,0.18)";
   ctx.fillStyle = themeColor("--subtle");
   ctx.font = "10px system-ui";
   ctx.lineWidth = 1;
@@ -1429,7 +1429,7 @@ function renderRobustness(data) {
     ctx.lineTo(sx(r.removal_fraction), sy(Math.max(0, r.lcc_fraction - (r.lcc_fraction_sd || 0))));
   }
   ctx.closePath();
-  ctx.fillStyle = "rgba(154,163,175,0.18)";
+  ctx.fillStyle = "rgba(60,70,85,0.22)";
   ctx.fill();
 
   const drawLine = (rows, color) => {
@@ -1503,7 +1503,7 @@ function drawEpiCurve(scope) {
   const sx = (i) => padL + (i / Math.max(1, rows.length - 1)) * (W - padL - padR);
   const sy = (v) => padT + (1 - v / n) * (H - padT - padB);
 
-  ctx.strokeStyle = "rgba(154,163,175,0.14)";
+  ctx.strokeStyle = "rgba(60,70,85,0.18)";
   ctx.fillStyle = themeColor("--subtle");
   ctx.font = "10px system-ui";
   for (const frac of [0, 0.25, 0.5, 0.75, 1]) {

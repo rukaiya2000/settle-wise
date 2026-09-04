@@ -1,37 +1,45 @@
 :root {
-  /* Dark-first: this is the palette, not a toggle. Every pair below is
-     WCAG-AA-verified (4.5:1 for text, 3:1 for interactive-element borders)
-     against the surface it's actually used on - see md/dashboard-spec.md
-     for the audit that drove this. */
-  --ink: #0b0d10;          /* topbar - deepest surface */
-  --bg: #14161a;           /* page background, 14.9:1 with --text */
-  --panel: #1c1f26;        /* cards, table, modals - one step up from bg */
-  --border: #262a32;       /* decorative dividers - intentionally subtle */
-  --border-strong: #626b79; /* input/interactive boundaries, 3:1+ on bg and panel */
-  --text: #e8e9eb;         /* primary text */
-  --subtle: #9aa3af;       /* secondary text, 7.1:1 on bg */
+  /* Light theme, matched to the borrower-facing checkout page so the two
+     read as one product. Every pair below is WCAG-AA-verified (4.5:1 for
+     text, 3:1 for interactive-element borders) against the surface it is
+     actually used on; the check lives in the commit that set them. */
+  --ink: #ffffff;          /* topbar */
+  --bg: #f4f6f8;           /* page background, 13.9:1 with --text */
+  --panel: #ffffff;        /* cards, table, modals */
+  --border: #e2e6ea;       /* decorative dividers - intentionally subtle */
+  --border-strong: #78828f; /* input/interactive boundaries, 3:1+ on bg and panel */
+  --hover: #eef1f5;        /* row / nav hover surface */
+  --raised: #e6eaef;       /* chips, bars, code - one step up from panel */
+  --text: #1c2430;         /* primary text */
+  --subtle: #5b6470;       /* secondary text, 5.9:1 on panel */
 
   --accent: #3564c7;       /* primary button fill - white text is 5.5:1 on this */
-  --accent-text: #5b8def;  /* accent used as foreground text/links, 5.6:1 on bg */
+  --accent-hover: #2a53ad;
+  --accent-text: #2452b3;  /* accent used as foreground text/links, 7.0:1 on panel */
 
-  --green: #4ade80;   --green-bg: #0f2a1b;   /* 8.8:1 */
-  --amber: #fbbf24;   --amber-bg: #332006;   /* 9.3:1 */
-  --blue: #7fa8f5;    --blue-bg: #13224a;    /* 6.5:1 */
-  --red: #fb7185;     --red-bg: #3a1015;     /* 6.2:1 */
-  --teal: #2dd4bf;    --teal-bg: #0c2b27;    /* 8.1:1 */
+  --overlay: rgba(20, 28, 40, 0.45);
+  --shadow: 0 18px 48px rgba(20, 28, 40, 0.18);
+
+  /* Status colours: dark text on a light tint of the same hue. */
+  --green: #166534;   --green-bg: #dcfce7;   --green-border: #86efac;
+  --amber: #92400e;   --amber-bg: #fef3c7;
+  --blue: #1e40af;    --blue-bg: #dbeafe;
+  --red: #991b1b;     --red-bg: #fee2e2;     --red-border: #fca5a5;
+  --teal: #115e59;    --teal-bg: #ccfbf1;
 
   /* Community/segment palette (8 slots, cycled by community % 8). Single
      source of truth for both the .segment-badge.cN rules below and the
      network canvas + legend in dashboard/app.js (read via getComputedStyle),
-     so the two never drift out of sync. */
-  --c0: #7fa8f5; --c0-bg: #13224a;
-  --c1: #2dd4bf; --c1-bg: #0c2b27;
-  --c2: #fbbf24; --c2-bg: #332006;
-  --c3: #fb7185; --c3-bg: #3a1015;
-  --c4: #c4a1f5; --c4-bg: #2a1a3a;
-  --c5: #4ade80; --c5-bg: #0f2a1b;
-  --c6: #f5d08a; --c6-bg: #2a2210;
-  --c7: #9ad5d5; --c7-bg: #1a2a2a;
+     so the two never drift out of sync. The --cN value doubles as the node
+     fill on the canvas, which is why these are the dark end of each hue. */
+  --c0: #1e40af; --c0-bg: #dbeafe;
+  --c1: #115e59; --c1-bg: #ccfbf1;
+  --c2: #92400e; --c2-bg: #fef3c7;
+  --c3: #991b1b; --c3-bg: #fee2e2;
+  --c4: #6b21a8; --c4-bg: #f3e8ff;
+  --c5: #166534; --c5-bg: #dcfce7;
+  --c6: #854d0e; --c6-bg: #fef9c3;
+  --c7: #155e75; --c7-bg: #cffafe;
 
   /* Type scale - 9 sizes, each with one job, replacing what used to be 12
      scattered hardcoded values with no consistent logic. */
@@ -71,6 +79,7 @@ body {
   justify-content: space-between;
   background: var(--ink);
   color: var(--text);
+  border-bottom: 1px solid var(--border);
   padding: 14px 24px;
 }
 
@@ -112,7 +121,7 @@ button {
   cursor: pointer;
 }
 
-button:hover { background: #2f59b3; border-color: #2f59b3; }
+button:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 button:disabled { opacity: 0.6; cursor: default; }
 
 button.ghost {
@@ -121,7 +130,7 @@ button.ghost {
   color: var(--text);
 }
 
-button.ghost:hover { background: var(--panel); }
+button.ghost:hover { background: var(--hover); }
 
 .btn-danger {
   background: var(--red-bg);
@@ -179,7 +188,7 @@ button.ghost:hover { background: var(--panel); }
 
 .debt-table tr:last-child td { border-bottom: none; }
 .debt-table tr.clickable { cursor: pointer; }
-.debt-table tr.clickable:hover { background: #21252d; }
+.debt-table tr.clickable:hover { background: var(--hover); }
 
 .borrower-name { font-weight: 600; }
 .subtle { color: var(--subtle); font-size: var(--fs-sm); }
@@ -549,7 +558,7 @@ button.ghost:hover { background: var(--panel); }
   user-select: none;
 }
 
-.call-details summary:hover { background: #1a2c5c; }
+.call-details summary:hover { background: var(--blue-bg); }
 
 /* Replace the default marker with one that rotates, so the control reads the
    same in every browser. */
@@ -581,7 +590,7 @@ button.ghost:hover { background: var(--panel); }
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -599,7 +608,7 @@ button.ghost:hover { background: var(--panel); }
   padding: 28px 24px;
   width: 100%;
   max-width: 380px;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow);
   animation: pay-in 0.16s ease-out;
 }
 
@@ -828,11 +837,11 @@ button.ghost:hover { background: var(--panel); }
   padding: 6px 10px;
   border-radius: 6px;
 }
-.topnav a:hover { color: var(--text); background: #1c1f26; }
-.topnav a.active { color: var(--text); background: #262a32; }
+.topnav a:hover { color: var(--text); background: var(--hover); }
+.topnav a.active { color: var(--text); background: var(--raised); }
 
 /* Handoff queue */
-.review-queue { border-color: #4a1c24; }
+.review-queue { border-color: var(--red-border); }
 .review-queue .panel-head h3 { color: var(--red); display: flex; align-items: center; gap: 8px; }
 .count-badge {
   min-width: 20px;
@@ -865,7 +874,7 @@ button.ghost:hover { background: var(--panel); }
   padding: 2px 8px;
   font-weight: 600;
   white-space: nowrap;
-  background: #262a32;
+  background: var(--raised);
   color: var(--text);
   border: 1px solid transparent;
 }
@@ -882,7 +891,7 @@ button.ghost:hover { background: var(--panel); }
 
 /* Next best action panel */
 .intel-panel .intel-empty { color: var(--subtle); font-size: var(--fs-sm); }
-.intel-panel .intel-empty code { color: var(--text); background: #262a32; padding: 1px 5px; border-radius: 4px; }
+.intel-panel .intel-empty code { color: var(--text); background: var(--raised); padding: 1px 5px; border-radius: 4px; }
 .nba {
   display: grid;
   grid-template-columns: 1.3fr 1fr;
@@ -953,7 +962,7 @@ button.ghost:hover { background: var(--panel); }
 .intel-callout {
   font-size: var(--fs-xs);
   color: var(--text);
-  background: #1a1d24;
+  background: var(--raised);
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
   border-radius: 6px;
@@ -995,8 +1004,8 @@ button.ghost:hover { background: var(--panel); }
 .finding .stat .p { font-variant-numeric: tabular-nums; }
 .finding .stat .sig { display: inline-block; margin-top: 4px; padding: 1px 7px; border-radius: 999px; font-size: var(--fs-2xs); font-weight: 700; }
 .finding .stat .sig.yes { background: var(--green-bg); color: var(--green); }
-.finding .stat .sig.no { background: #262a32; color: var(--subtle); }
-.finding.null-check { border-color: #2a3a2a; }
+.finding .stat .sig.no { background: var(--raised); color: var(--subtle); }
+.finding.null-check { border-color: var(--green-border); }
 .finding .limits { grid-column: 1 / -1; font-size: var(--fs-2xs); color: var(--subtle); border-top: 1px dashed var(--border); padding-top: 6px; }
 .model-cards { display: flex; flex-direction: column; gap: 8px; }
 .model-card { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
@@ -1007,7 +1016,7 @@ button.ghost:hover { background: var(--panel); }
 .model-card .metrics span b { font-variant-numeric: tabular-nums; }
 .model-card .notes { margin-top: 6px; font-size: var(--fs-2xs); color: var(--subtle); }
 .calib { display: flex; align-items: flex-end; gap: 2px; height: 36px; margin-top: 8px; }
-.calib .bar { flex: 1; background: #262a32; position: relative; border-radius: 2px 2px 0 0; }
+.calib .bar { flex: 1; background: var(--raised); position: relative; border-radius: 2px 2px 0 0; }
 .calib .bar i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--accent-text); border-radius: 2px 2px 0 0; }
 
 @media (max-width: 900px) {

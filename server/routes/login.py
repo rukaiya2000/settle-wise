@@ -34,25 +34,25 @@ _PAGE = """<!doctype html>
   * {{ box-sizing: border-box; }}
   body {{
     margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
-    background: #14161a; color: #e8e9eb;
+    background: #f4f6f8; color: #1c2430;
     font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }}
-  .card {{ width: 320px; padding: 32px; background: #1c1f26; border: 1px solid #262a32; border-radius: 12px; }}
+  .card {{ width: 320px; padding: 32px; background: #ffffff; border: 1px solid #e2e6ea; border-radius: 12px; }}
   .brand {{ font-size: 20px; font-weight: 700; margin-bottom: 4px; }}
-  .subtitle {{ color: #9aa3af; font-size: 13px; margin-bottom: 24px; }}
-  label {{ display: block; font-size: 12px; color: #9aa3af; margin-bottom: 6px; }}
+  .subtitle {{ color: #5b6470; font-size: 13px; margin-bottom: 24px; }}
+  label {{ display: block; font-size: 12px; color: #5b6470; margin-bottom: 6px; }}
   input {{
-    width: 100%; padding: 10px 12px; margin-bottom: 16px; background: #14161a; color: #e8e9eb;
-    border: 1px solid #262a32; border-radius: 8px; font-size: 14px; font-family: inherit;
+    width: 100%; padding: 10px 12px; margin-bottom: 16px; background: #f4f6f8; color: #1c2430;
+    border: 1px solid #e2e6ea; border-radius: 8px; font-size: 14px; font-family: inherit;
   }}
-  input:focus {{ outline: none; border-color: #5b8def; box-shadow: 0 0 0 3px #13224a; }}
+  input:focus {{ outline: none; border-color: #3564c7; box-shadow: 0 0 0 3px #dbeafe; }}
   button {{
     width: 100%; padding: 11px; background: #3564c7; color: #fff; border: none; border-radius: 8px;
     font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
   }}
-  button:hover {{ background: #2d55a8; }}
+  button:hover {{ background: #2a53ad; }}
   .error {{
-    background: #3a1015; color: #fb7185; border-radius: 8px; padding: 8px 12px;
+    background: #fee2e2; color: #991b1b; border-radius: 8px; padding: 8px 12px;
     font-size: 13px; margin-bottom: 16px;
   }}
 </style>
