@@ -64,6 +64,12 @@ async function api(path, options) {
     ...options,
     headers: { "Content-Type": "application/json", ...(options && options.headers) },
   });
+  if (res.status === 401) {
+    // Session cookie expired mid-use - send the tab to a real login instead
+    // of leaving every panel showing a raw "401: authentication required".
+    window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.hash)}`;
+    return new Promise(() => {}); // navigation is in flight; never resolve
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`${res.status}: ${text}`);
