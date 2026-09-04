@@ -29,7 +29,11 @@ def status():
         count_sql = ", ".join(f"(SELECT COUNT(*) FROM {t}) AS {t}" for t in _COUNT_TABLES)
         counts = dict(conn.execute(f"SELECT {count_sql}").fetchone())
         network = row_to_dict(conn.execute("SELECT * FROM network_metrics ORDER BY built_at DESC LIMIT 1").fetchone())
-        champion = row_to_dict(conn.execute("SELECT model_version, model_name, trained_at FROM model_registry WHERE is_champion = 1").fetchone())
+        champion = row_to_dict(
+            conn.execute(
+                "SELECT model_version, model_name, trained_at FROM model_registry WHERE is_champion = 1 ORDER BY trained_at DESC LIMIT 1"
+            ).fetchone()
+        )
         available = intelligence_available(conn)
     manifest_path = config.BASE_DIR / "data" / "synthetic" / "manifest.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
@@ -101,8 +105,16 @@ def strategies():
 
 @router.get("/models")
 def models():
+    """The most recent training run's models - model_registry accumulates
+    a row per model per run, not just the latest, so this is filtered to
+    the newest trained_at rather than returning every run ever made."""
     with get_conn() as conn:
-        rows = rows_to_dicts(conn, "SELECT * FROM model_registry ORDER BY is_champion DESC, roc_auc DESC")
+        rows = rows_to_dicts(
+            conn,
+            """SELECT * FROM model_registry
+               WHERE trained_at = (SELECT MAX(trained_at) FROM model_registry)
+               ORDER BY is_champion DESC, roc_auc DESC""",
+        )
     for r in rows:
         r["calibration"] = json.loads(r.pop("calibration_json") or "[]")
     return rows

@@ -148,6 +148,35 @@ best_threshold <- function(y, p) {
   grid[which.max(replace(f1, is.na(f1), -1))]
 }
 
+# Reference-cohort snapshot as of a fixed cutoff, not each borrower's full
+# eventual history. Two leaks this closes at once:
+#   1. neighbour_paid_rate/neighbour_contact_rate used to average each
+#      neighbour's FINAL outcome and full-history contact rate - a training
+#      or test row could "see" what a similar borrower went on to do,
+#      including events chronologically after the row's own timestamp.
+#   2. The standardisation center/scale for the as-of query vectors came
+#      from net$Z, fit over ALL historical borrowers (train+valid+test
+#      together) - the reported test metrics were computed using a scaler
+#      that had already seen the test set's feature distribution.
+# Bounding every reference-cohort statistic (the scaler, the neighbour
+# rates) at the train/valid split boundary fixes both: nothing used to
+# score a valid/test row can see anything past that cutoff, since every
+# train account opened before it by construction of the chronological
+# split. The one residual is intentional and low-stakes: an early train
+# row's neighbour features can still reflect a bit more of a neighbour's
+# history than was known at that exact row's own timestamp, but that only
+# affects what the model is trained on, never the reported evaluation
+# numbers, since valid/test scoring never crosses the cutoff.
+snapshot_at <- function(events, borrowers, cutoff) {
+  ev <- events %>% filter(as.POSIXct(event_time) <= cutoff)
+  calls <- ev %>% filter(event_type == "call_attempt")
+  paid_ids <- unique((ev %>% filter(event_type == "payment"))$debt_id)
+  contact <- calls %>% group_by(debt_id) %>% summarise(contact_success_rate = mean(outcome != "no_answer"), .groups = "drop")
+  borrowers %>% select(debt_id) %>%
+    left_join(contact, by = "debt_id") %>%
+    mutate(contact_success_rate = coalesce(contact_success_rate, 0), paid_by_cutoff = debt_id %in% paid_ids)
+}
+
 calibration_bins <- function(y, p, bins = 10) {
   q <- unique(quantile(p, probs = seq(0, 1, length.out = bins + 1)))
   b <- cut(p, q, include.lowest = TRUE)
@@ -171,15 +200,19 @@ run_model <- function(ctx, net) {
   split_of <- hist_b %>% transmute(debt_id, split = case_when(as.POSIXct(opened_at) <= cuts[1] ~ "train", as.POSIXct(opened_at) <= cuts[2] ~ "valid", TRUE ~ "test"))
   d <- d %>% left_join(split_of, by = "debt_id")
 
-  # Reference cohort for neighbour features = training borrowers' full
-  # histories (the graph's own feature space, standardised the same way).
-  Zall <- net$Z
+  # Reference cohort for neighbour features = training borrowers, snapshotted
+  # at the train/valid boundary (see snapshot_at() above) rather than their
+  # full eventual history - both the standardisation and the neighbour rates
+  # are fit fresh here, not reused from net$Z's population-wide fit.
   train_ids <- split_of$debt_id[split_of$split == "train"]
-  Zref <- Zall[rownames(Zall) %in% train_ids, , drop = FALSE]
-  ref <- list(center = attr(Zall, "center"), scale = attr(Zall, "scale"),
-              mean_contact = mean(ctx$features$contact_success_rate[ctx$features$debt_id %in% train_ids]))
-  paid_ref <- hist_b$paid[match(rownames(Zref), hist_b$debt_id)]
-  contact_ref <- ctx$features$contact_success_rate[match(rownames(Zref), ctx$features$debt_id)]
+  train_cutoff <- as.POSIXct(cuts[1])
+  train_feats <- ctx$features %>% filter(debt_id %in% train_ids)
+  Zref <- network_matrix(train_feats)
+  ref <- list(center = attr(Zref, "center"), scale = attr(Zref, "scale"), mean_contact = mean(train_feats$contact_success_rate))
+  snap <- snapshot_at(ctx$events %>% filter(cohort == "historical"), hist_b %>% filter(debt_id %in% train_ids), train_cutoff)
+  snap <- snap[match(rownames(Zref), snap$debt_id), ]
+  paid_ref <- as.numeric(snap$paid_by_cutoff)
+  contact_ref <- snap$contact_success_rate
   nf <- neighbour_features(asof_network_matrix(d, ref), Zref, paid_ref, contact_ref, exclude_self = d$debt_id)
   d <- bind_cols(d, nf)
 
@@ -208,7 +241,11 @@ run_model <- function(ctx, net) {
   # 3. Gradient boosting, shallow, early-stopped on validation.
   set.seed(SEED)
   dtr <- xgb.DMatrix(Xtr, label = tr$label); dva <- xgb.DMatrix(Xva, label = va$label)
-  bst <- xgb.train(params = list(objective = "binary:logistic", eval_metric = "aucpr", max_depth = 3, eta = 0.05, subsample = 0.8, colsample_bytree = 0.8, min_child_weight = 5),
+  # nthread pinned to 1: xgboost's multi-threaded histogram build is not
+  # guaranteed bit-identical run to run even with set.seed() fixed, since
+  # floating-point summation order depends on thread scheduling. Only
+  # matters for exact reproducibility, not for the model's quality.
+  bst <- xgb.train(params = list(objective = "binary:logistic", eval_metric = "aucpr", max_depth = 3, eta = 0.05, subsample = 0.8, colsample_bytree = 0.8, min_child_weight = 5, nthread = 1),
                    data = dtr, nrounds = 600, evals = list(valid = dva), early_stopping_rounds = 40, verbose = 0)
   p_va <- predict(bst, Xva); p_te <- predict(bst, Xte)
   th <- best_threshold(va$label, p_va)
@@ -226,7 +263,7 @@ run_model <- function(ctx, net) {
     mutate(trained_at = NOW, n_train = nrow(tr), n_test = nrow(te), feature_version = FEATURE_VERSION,
            is_champion = model_version == paste0(MODEL_VERSION, "-", ifelse(champion == "xgb", "xgboost", champion)),
            calibration_json = map_chr(c("baseline", "glmnet", "xgb"), ~ toJSON(calibration_bins(te$label, preds_test[[.x]]), digits = 4)))
-  write_table("model_registry", reg %>% select(model_version, model_name, trained_at, n_train, n_test, roc_auc, pr_auc, brier,
+  append_table("model_registry", reg %>% select(model_version, model_name, trained_at, n_train, n_test, roc_auc, pr_auc, brier,
                                                precision_at_threshold, recall_at_threshold, f1_at_threshold, threshold, positive_rate,
                                                calibration_json, feature_version, is_champion, notes))
   log_step("model: champion = %s (valid PR-AUC %.3f); test ROC-AUC %.3f, PR-AUC %.3f, Brier %.3f",

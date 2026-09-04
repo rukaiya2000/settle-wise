@@ -56,6 +56,17 @@ write_table <- function(name, df) {
   invisible(nrow(df))
 }
 
+# Like write_table, but appends rather than replaces - for tables meant to
+# accumulate a history across runs (model_registry) rather than represent
+# only the current state.
+append_table <- function(name, df) {
+  con <- db(); on.exit(dbDisconnect(con))
+  df <- as.data.frame(df)
+  for (col in names(df)) if (is.logical(df[[col]])) df[[col]] <- as.integer(df[[col]])
+  dbWriteTable(con, name, df, append = TRUE)
+  invisible(nrow(df))
+}
+
 log_step <- function(...) cat(format(Sys.time(), "%H:%M:%S"), "-", sprintf(...), "\n")
 
 # Bootstrap CI for a mean/proportion, resampling at the borrower level when

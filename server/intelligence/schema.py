@@ -156,8 +156,13 @@ CREATE TABLE IF NOT EXISTS strategy_performance (
     median_days_to_payment REAL
 );
 
+-- One row per model per training run - appended (not overwritten) by
+-- intelligence/R/04_model.R, so this is an actual history rather than only
+-- ever showing the most recent run. model_version ("payment7d-v1-xgboost")
+-- names the model *type*, not a specific run, so it repeats across runs and
+-- can't be a primary key here; trained_at is what disambiguates a row.
 CREATE TABLE IF NOT EXISTS model_registry (
-    model_version TEXT PRIMARY KEY,
+    model_version TEXT,
     model_name TEXT,
     trained_at TEXT,
     n_train INTEGER,
@@ -175,6 +180,7 @@ CREATE TABLE IF NOT EXISTS model_registry (
     is_champion INTEGER,
     notes TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_model_registry_trained_at ON model_registry(trained_at);
 
 CREATE TABLE IF NOT EXISTS network_metrics (
     graph_version TEXT PRIMARY KEY,
