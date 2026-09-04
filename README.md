@@ -6,8 +6,6 @@ An AI collections agent that phones borrowers, negotiates a repayment inside
 policy limits, and turns the agreement into a payment — built as a hackathon
 demo.
 
-![Workflow: the ops dashboard starts a call through Vapi and a SIP trunk; the voice agent speaks but every figure comes from the tool layer over SQLite, with offer_engine enforcing the floor; it ends in an SMS payment link, a recorded payment, and a scheduled follow-up, plus a branch to human review on a dispute, refusal, or abuse.](assets/settlewise-workflow-v3.png)
-
 The interesting part isn't that it can hold a phone conversation. It's that
 **the agent can't invent anything**. Every figure it says, every offer it
 makes, and every state change comes from a tool call against a real database,
@@ -138,7 +136,6 @@ The prompt lives at [`server/agent/prompt.md`](./server/agent/prompt.md) and
 | `server/scheduler.py`, `demo_clock.py` | fake clock so 30 days replays in seconds |
 | `dashboard/` | operator UI — borrower list, profile, customer management (no build step, plain JS) |
 | `intelligence/`, `server/intelligence/` | the R analytics layer (network, statistics, ML) and the Python glue that extracts events for it and serves its output read-only |
-| `FEATURES.md`, `SETTLEWISE_INTELLIGENCE_REQUIREMENTS.md` | working spec for the intelligence layer |
 
 ## The demo clock
 
