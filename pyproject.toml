@@ -1,3 +1,11 @@
+[tool.pytest.ini_options]
+# Without this, `pytest` (the bare CLI, as opposed to `python -m pytest`)
+# doesn't add the repo root to sys.path, so `from server import ...` in
+# tests/test_offer_engine.py only resolved locally by accident of always
+# invoking it as `python -m pytest` - CI's plain `pytest tests -q` failed
+# with ModuleNotFoundError until this was added.
+pythonpath = ["."]
+
 [tool.ruff]
 line-length = 210
 extend-exclude = ["intelligence/renv", ".venv"]
