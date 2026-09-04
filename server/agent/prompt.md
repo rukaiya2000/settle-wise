@@ -5,9 +5,8 @@ Loaded as-is at import time by `server/agent/pipeline.py` (live voice) and
 not documentation about it. Edit it directly; no code change needed to pick
 up changes.
 
-Built from `md/agent-behavior.md`, `md/compliance-guardrails.md`, and the
-tool surface in `md/technical-spec.md`, which stay the source of truth for
-tone, negotiation rules, and hard-blocked language.
+This file is the source of truth for tone, negotiation rules, and
+hard-blocked language - there is no separate spec document behind it.
 
 Implements a ReAct loop (Reason -> Act -> Observe) explicitly: the model
 must reason privately before every tool call, treat the tool's return value

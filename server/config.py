@@ -37,9 +37,9 @@ VAPI_VOICE_PROVIDER = os.getenv("VAPI_VOICE_PROVIDER", "openai")
 # No trailing slash, e.g. https://abcd1234.ngrok-free.app
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 
-# Gate on actually sending SMS through a1mobile. Off by default: md/product-brief.md
-# and md/mvp-scope.md list "no real outbound SMS/calling" as a non-goal for the
-# simulated demo loop. Flip to true only for the live verified-number demo call.
+# Gate on actually sending SMS through a1mobile. Off by default so the
+# simulated demo loop never texts anyone; flip to true only for the live
+# verified-number demo call.
 A1MOBILE_LIVE_SMS = os.getenv("A1MOBILE_LIVE_SMS", "false").lower() == "true"
 
 # Hackathon AI gateway (HTTP-only, /responses endpoint) - not used for the
@@ -72,7 +72,7 @@ MIN_PAYMENT_PCT = float(os.getenv("MIN_PAYMENT_PCT", "5"))
 # so 10% every 5 days settles a balance in 50 days.
 CYCLE_DAYS = int(os.getenv("CYCLE_DAYS", "5"))
 
-# Demo clock (md/technical-spec.md) - fake controllable time so 30 days of
-# collections activity can be compressed into a short demo.
+# Demo clock - fake controllable time so 30 days of collections activity
+# can be compressed into a short demo.
 DEMO_CLOCK_START = os.getenv("DEMO_CLOCK_START", "2026-08-01T09:00:00")
 DEMO_CLOCK_TIMEZONE = os.getenv("DEMO_CLOCK_TIMEZONE", "America/Los_Angeles")

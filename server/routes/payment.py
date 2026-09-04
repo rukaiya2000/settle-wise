@@ -1,5 +1,5 @@
-"""Mock payment checkout (md/system-architecture.md: fake /pay/:paymentId
-that simulates success/pending states - no real payment processor).
+"""Mock payment checkout - a fake /pay/:paymentId that simulates
+success/pending states, no real payment processor.
 
 Borrower-facing and reached from an SMS, so it is built mobile-first and
 self-contained: no external CSS, no framework, works on a phone browser with
@@ -169,6 +169,6 @@ def complete_payment(payment_id: str):
 
 @router.post("/api/payments/{payment_id}/mark-paid")
 def mark_paid_api(payment_id: str):
-    """Same completion as /pay/{payment_id}/complete, under the REST path
-    named in md/technical-spec.md's Backend Endpoints."""
+    """Same completion as /pay/{payment_id}/complete, under a REST-style
+    path for API callers that expect one."""
     return complete_payment(payment_id)

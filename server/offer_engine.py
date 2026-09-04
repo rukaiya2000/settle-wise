@@ -1,4 +1,4 @@
-"""Deterministic offer generation per md/technical-spec.md "Agent Tool Surface".
+"""Deterministic offer generation - what the agent tool surface may offer.
 
 Repayment runs on a cycle: `due_now_percent` of the balance is due now, and
 the same amount again every `cycle_days` until the balance clears - 10% every

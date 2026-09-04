@@ -1,4 +1,4 @@
-"""Scheduler (md/technical-spec.md "Scheduler Loop" / "Advance Algorithm").
+"""Scheduler loop - the demo clock's advance algorithm.
 
 Fires every debt's due next_action, in chronological order, up to the
 target time - this is what lets advancing the demo clock replay days of

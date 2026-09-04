@@ -1,4 +1,4 @@
-"""Demo clock (md/technical-spec.md "Demo Clock").
+"""Demo clock.
 
 A fake, controllable system time. All scheduling/workflow code reads
 get_demo_now() instead of datetime.now(), so 30 days of collections

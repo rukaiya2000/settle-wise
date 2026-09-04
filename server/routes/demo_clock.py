@@ -1,4 +1,4 @@
-"""Demo clock controls (md/technical-spec.md "Demo Clock")."""
+"""Demo clock controls."""
 
 from fastapi import APIRouter
 from pydantic import BaseModel

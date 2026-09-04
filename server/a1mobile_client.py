@@ -53,7 +53,7 @@ def send_sms(to: str, body: str) -> dict:
     on the a1mobile side (OTP flow) - see request_verification/confirm_verification.
     Callers in server/agent/tools.py additionally gate this behind
     config.A1MOBILE_LIVE_SMS so the simulated demo loop never sends real texts
-    by accident (md/product-brief.md non-goals)."""
+    by accident."""
     r = requests.post(
         f"{config.A1MOBILE_BASE_URL}/api/sms",
         headers=_headers(True),

@@ -1,5 +1,4 @@
-"""Deterministic simulated call engine (md/implementation-checklist.md step 6:
-"Build fake run-agent deterministic flow" before real voice integration).
+"""Deterministic simulated call engine.
 
 Drives the exact same tools the live realtime agent uses
 (server/agent/tools.py), so a call fired by the demo-clock scheduler and a

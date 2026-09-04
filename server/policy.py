@@ -1,4 +1,4 @@
-"""Synthetic collections policy (md/technical-spec.md "Synthetic Policy").
+"""Synthetic collections policy.
 
 Gives the agent/simulator boundaries: call windows, discount/installment
 caps, and human-review triggers. Stored as a single DB row so it can be

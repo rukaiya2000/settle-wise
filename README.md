@@ -137,7 +137,8 @@ The prompt lives at [`server/agent/prompt.md`](./server/agent/prompt.md) and
 | `server/offer_engine.py` | what may be offered — the enforced limits |
 | `server/scheduler.py`, `demo_clock.py` | fake clock so 30 days replays in seconds |
 | `dashboard/` | operator UI — borrower list, profile, customer management (no build step, plain JS) |
-| `md/` | product and technical specs |
+| `intelligence/`, `server/intelligence/` | the R analytics layer (network, statistics, ML) and the Python glue that extracts events for it and serves its output read-only |
+| `FEATURES.md`, `SETTLEWISE_INTELLIGENCE_REQUIREMENTS.md` | working spec for the intelligence layer |
 
 ## The demo clock
 
@@ -160,7 +161,7 @@ It's a hackathon build, and a few things are honest to say out loud:
   clear up test entries, and the dashboard confirms first.
 - **No real money moves.** `/pay/{id}` is a mock checkout that updates the
   database.
-- **Compliance is demo-grade.** The guardrails in
-  [`md/compliance-guardrails.md`](./md/compliance-guardrails.md) are modelled
-  on real collections practice but have had no legal review.
+- **Compliance is demo-grade.** The hard rules in
+  [`server/agent/prompt.md`](./server/agent/prompt.md) are modelled on real
+  collections practice but have had no legal review.
 - **SMS and calls only reach OTP-verified numbers**, by the provider's rule.

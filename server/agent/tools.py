@@ -1,5 +1,5 @@
-"""Tool-first actions for the collections agent, matching the tool surface
-in md/technical-spec.md. Shared by the live realtime voice agent
+"""Tool-first actions for the collections agent - the tool surface named
+in server/agent/tool_registry.py. Shared by the live realtime voice agent
 (server/agent/pipeline.py) and the deterministic simulator
 (server/agent/simulated_call.py) that the demo-clock scheduler drives, so a
 scheduled 30-day replay and a real phone call produce identical-shaped data.
@@ -277,8 +277,8 @@ def update_debt_status(
 
 
 def write_memory(debt_id: str, key: str, value: str) -> dict:
-    # md/memory-and-learning.md "Bad Memory": never persist protected traits,
-    # insults, or speculative labels. "Let later calls overwrite stale facts."
+    # Never persist protected traits, insults, or speculative labels - a
+    # later call overwrites a stale fact under the same key instead.
     mem_id = f"mem_{uuid.uuid4().hex[:8]}"
     with get_conn() as conn:
         conn.execute("DELETE FROM memory WHERE debt_id = ? AND key = ?", (debt_id, key))
@@ -440,8 +440,7 @@ def flag_borrower(debt_id: str, reason: str, severity: str = "warning") -> dict:
     profile so the next person to pick this up sees it before dialling.
 
     severity "warning" notes it but leaves the account collectable;
-    "abuse" also suspends automated collection by routing to human review,
-    per the escalation triggers in md/human-review.md.
+    "abuse" also suspends automated collection by routing to human review.
     """
     with get_conn() as conn:
         conn.execute(

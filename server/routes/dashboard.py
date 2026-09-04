@@ -1,4 +1,4 @@
-"""Dashboard API backing the profiles/progress screens (md/dashboard-spec.md)."""
+"""Dashboard API backing the profiles/progress screens."""
 
 import random
 import re
@@ -237,7 +237,7 @@ def bulk_delete_debts(req: BulkDeleteRequest):
 
 @router.get("/api/debts/{debt_id}/progress")
 def get_debt_progress(debt_id: str):
-    """Key measures for the person progress page (md/dashboard-spec.md)."""
+    """Key measures for the borrower progress page."""
     debt = agent_tools._debt_row(debt_id)
     if "error" in debt:
         raise HTTPException(404, "not found")
