@@ -3,10 +3,9 @@
 a1mobile's own API has no outbound-calling capability (confirmed: its MCP
 catalog exposes only claim/point/SMS/verify tools, every guessed REST
 endpoint 404s, and a raw SIP INVITE with the claimed credentials never
-completes digest auth even though REGISTER succeeds). Outbound is instead
-reachable by registering those same SIP credentials as a Vapi BYO SIP trunk
-- Vapi handles the trunk registration and INVITE auth, then dials out
-through it.
+completes digest auth even though REGISTER succeeds). Outbound goes
+through Vapi instead, dialling from a Vapi-hosted number
+(VAPI_PHONE_NUMBER_ID) - a1mobile is not on this path at all.
 
 That means Vapi runs the voice loop (its own STT/LLM/TTS) rather than our
 Pipecat pipeline, so the agent reaches our negotiation logic through this

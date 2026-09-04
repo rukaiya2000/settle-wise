@@ -10,15 +10,10 @@ A1MOBILE_BASE_URL = os.getenv("A1MOBILE_BASE_URL", "https://hack.a1mobile.com")
 A1MOBILE_TEAM_KEY = os.getenv("A1MOBILE_TEAM_KEY", "")
 A1MOBILE_PHONE_NUMBER = os.getenv("A1MOBILE_PHONE_NUMBER", "")
 
-# SIP credentials from /api/numbers/claim. a1mobile itself has no outbound
-# calling, but these can be registered as a Vapi BYO SIP trunk to dial out.
-A1MOBILE_SIP_USERNAME = os.getenv("A1MOBILE_SIP_USERNAME", "")
-A1MOBILE_SIP_PASSWORD = os.getenv("A1MOBILE_SIP_PASSWORD", "")
-
-# Vapi (outbound calling). VAPI_PRIVATE_KEY is set by hand; the three ids are
-# written by `python -m server.vapi_setup setup`.
+# Vapi (outbound calling). VAPI_PRIVATE_KEY is set by hand, VAPI_ASSISTANT_ID
+# is written by `python -m server.vapi_setup setup`, and VAPI_PHONE_NUMBER_ID
+# is the Vapi-hosted number to dial from (`vapi_setup numbers` lists them).
 VAPI_PRIVATE_KEY = os.getenv("VAPI_PRIVATE_KEY", "")
-VAPI_CREDENTIAL_ID = os.getenv("VAPI_CREDENTIAL_ID", "")
 VAPI_PHONE_NUMBER_ID = os.getenv("VAPI_PHONE_NUMBER_ID", "")
 VAPI_ASSISTANT_ID = os.getenv("VAPI_ASSISTANT_ID", "")
 

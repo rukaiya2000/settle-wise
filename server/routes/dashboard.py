@@ -306,7 +306,7 @@ def run_agent(debt_id: str, force: bool = False):
 
 @router.post("/api/debts/{debt_id}/call-agent")
 def call_agent(debt_id: str, background_tasks: BackgroundTasks):
-    """Place a real outbound phone call through Vapi's a1mobile SIP trunk."""
+    """Place a real outbound phone call through Vapi."""
     debt = agent_tools.get_debt_profile(debt_id)
     if "error" in debt:
         raise HTTPException(404, "not found")
