@@ -9,6 +9,7 @@ namespace separate from /api/debts.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 
 from fastapi import APIRouter, HTTPException
@@ -191,6 +192,16 @@ def rebuild():
     """Re-run extraction + the R pipeline. Synchronous and slow-ish (tens of
     seconds); the dashboard button that calls it says so. Runs `make
     intelligence` so the CLI and the button can never disagree."""
+    # The deployed instance has no R, no make, and no writable checkout - the
+    # intelligence tables are computed locally and pushed with
+    # scripts/sync_intelligence.py. Fail with something explanatory rather
+    # than a subprocess traceback.
+    if not shutil.which("Rscript"):
+        raise HTTPException(
+            501,
+            "Rebuild runs the R pipeline, which isn't available on this deployment. "
+            "Run `make intelligence` locally, then `python scripts/sync_intelligence.py` to push the results.",
+        )
     proc = subprocess.run(
         ["make", "intelligence"],
         cwd=config.BASE_DIR,

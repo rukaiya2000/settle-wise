@@ -1,8 +1,27 @@
+"""Database access, over SQLite locally and Postgres when deployed.
+
+Which backend is used depends solely on whether config.DATABASE_URL is set:
+unset means the SQLite file this project has always used (so local dev, the
+test suite, CI, and the R pipeline in intelligence/ are all unchanged and
+need no setup), set means Postgres (Supabase, on the serverless deployment
+where there is no writable filesystem to keep a SQLite file on).
+
+Every caller in the codebase goes through get_conn()/row_to_dict()/
+rows_to_dicts() below and writes SQLite-flavoured SQL with `?` and `:name`
+placeholders. Rather than rewrite ~120 call sites across 16 modules, the
+Postgres connection is wrapped so it translates those placeholders to
+psycopg's `%s`/`%(name)s` on the way through - which is why nothing outside
+this module had to change.
+"""
+
+import re
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
 from . import config
+
+IS_POSTGRES = bool(config.DATABASE_URL)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS debts (
@@ -105,9 +124,89 @@ CREATE TABLE IF NOT EXISTS policies (
 DEFAULT_POLICY_ID = "policy_default"
 
 
+_PLACEHOLDER_RE = re.compile(r"'[^']*'|:([a-zA-Z_][a-zA-Z0-9_]*)|\?")
+
+
+def _to_pg_params(sql: str) -> str:
+    """SQLite `?` and `:name` -> psycopg `%s` and `%(name)s`.
+
+    Quoted string literals are matched first and passed through untouched, so
+    a `?` or `:foo` inside one is never mistaken for a placeholder. A literal
+    `%` in the SQL has to be doubled for psycopg, which is done here too."""
+
+    def swap(m: re.Match) -> str:
+        text = m.group(0)
+        if text.startswith("'"):
+            return text
+        return f"%({m.group(1)})s" if m.group(1) else "%s"
+
+    return _PLACEHOLDER_RE.sub(swap, sql.replace("%", "%%"))
+
+
+class _PgConn:
+    """Gives a psycopg connection the small slice of the sqlite3 API this
+    codebase actually uses: conn.execute(sql, params) returning something
+    with .fetchone()/.fetchall(), plus commit/close."""
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    def execute(self, sql: str, params=None):
+        cur = self._conn.cursor()
+        cur.execute(_to_pg_params(sql), params if params else None)
+        return cur
+
+    def executescript(self, sql: str):
+        # psycopg runs a multi-statement string fine as long as nothing is
+        # bound to it - which is exactly how SCHEMA is used.
+        self._conn.execute(sql.replace("%", "%%"))
+        return self
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        self._conn.close()
+
+
+def _connect_pg():
+    import psycopg
+    from psycopg.rows import dict_row
+
+    return _PgConn(psycopg.connect(config.DATABASE_URL, row_factory=dict_row, autocommit=False))
+
+
+# `current_time` is a column on demo_clock and a reserved word in Postgres,
+# so it has to be quoted there. Quoting works in SQLite too, but the bare
+# name is what the existing SQLite-era SQL uses.
+CURRENT_TIME = '"current_time"' if IS_POSTGRES else "current_time"
+
+
+# SQLite's INSERT OR IGNORE / INSERT OR REPLACE are its own syntax, but both
+# engines support the standard UPSERT form (SQLite since 3.24), so these emit
+# one dialect-neutral clause rather than branching on the backend.
+
+
+def _on_conflict_ignore(pk: str) -> str:
+    return f" ON CONFLICT ({pk}) DO NOTHING"
+
+
+def on_conflict_replace(pk: str, columns: list[str]) -> str:
+    """Replacement for INSERT OR REPLACE, used by server/seed.py so
+    re-seeding overwrites existing rows rather than erroring."""
+    assignments = ", ".join(f"{c} = EXCLUDED.{c}" for c in columns if c != pk)
+    return f" ON CONFLICT ({pk}) DO UPDATE SET {assignments}"
+
+
 def _migrate(conn):
     """CREATE TABLE IF NOT EXISTS silently does nothing to a table that
-    already exists, so columns added later need backfilling explicitly."""
+    already exists, so columns added later need backfilling explicitly.
+
+    SQLite only: this exists to patch .db files created by older versions of
+    this code. A Postgres database is always created fresh from SCHEMA, so
+    there is nothing to backfill (and PRAGMA doesn't exist there anyway)."""
+    if IS_POSTGRES:
+        return
     existing = {r[1] for r in conn.execute("PRAGMA table_info(debts)")}
     if "account_ref" not in existing:
         conn.execute("ALTER TABLE debts ADD COLUMN account_ref TEXT")
@@ -142,19 +241,24 @@ def _migrate(conn):
 
 
 def init_db():
-    Path(config.DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(config.DB_PATH)
+    if IS_POSTGRES:
+        conn = _connect_pg()
+    else:
+        Path(config.DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(config.DB_PATH)
     conn.executescript(SCHEMA)
     _migrate(conn)
     conn.execute(
-        "INSERT OR IGNORE INTO demo_clock (id, current_time, timezone, speed) VALUES (1, ?, ?, 'paused')",
+        f"INSERT INTO demo_clock (id, {CURRENT_TIME}, timezone, speed) VALUES (1, ?, ?, 'paused')"
+        f"{_on_conflict_ignore('id')}",
         (config.DEMO_CLOCK_START, config.DEMO_CLOCK_TIMEZONE),
     )
     conn.execute(
-        """INSERT OR IGNORE INTO policies
+        """INSERT INTO policies
         (id, max_discount_percent, due_now_percent, cycle_days, min_payment_today_percent, max_installments,
          call_attempts_per_day, allowed_call_hours_start, allowed_call_hours_end, human_review_triggers)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+        + _on_conflict_ignore("id"),
         (
             DEFAULT_POLICY_ID,
             config.MAX_DISCOUNT_PCT,
@@ -174,8 +278,11 @@ def init_db():
 
 @contextmanager
 def get_conn():
-    conn = sqlite3.connect(config.DB_PATH)
-    conn.row_factory = sqlite3.Row
+    if IS_POSTGRES:
+        conn = _connect_pg()
+    else:
+        conn = sqlite3.connect(config.DB_PATH)
+        conn.row_factory = sqlite3.Row
     try:
         yield conn
         conn.commit()
@@ -183,7 +290,9 @@ def get_conn():
         conn.close()
 
 
-def row_to_dict(row: sqlite3.Row | None):
+def row_to_dict(row):
+    # Works for both backends: a sqlite3.Row converts, and psycopg's
+    # dict_row already yields a dict (which dict() copies).
     return dict(row) if row is not None else None
 
 

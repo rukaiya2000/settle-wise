@@ -10,7 +10,7 @@ import json
 from datetime import datetime, timedelta
 
 from . import config
-from .db import get_conn
+from .db import CURRENT_TIME, get_conn
 
 UNIT_DELTAS = {
     "hour": lambda n: timedelta(hours=n),
@@ -30,7 +30,7 @@ def get_demo_now() -> datetime:
 
 def set_demo_clock(current_time_iso: str) -> dict:
     with get_conn() as conn:
-        conn.execute("UPDATE demo_clock SET current_time = ? WHERE id = 1", (current_time_iso,))
+        conn.execute(f"UPDATE demo_clock SET {CURRENT_TIME} = ? WHERE id = 1", (current_time_iso,))
     return get_demo_clock()
 
 

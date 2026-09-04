@@ -2,7 +2,7 @@ import json
 import sys
 
 from . import config
-from .db import get_conn, init_db
+from .db import CURRENT_TIME, get_conn, init_db, on_conflict_replace
 
 
 def reset_db():
@@ -43,14 +43,25 @@ def seed():
         print(f"Loaded synthetic live book from {live_book}")
 
 
+DEBT_COLUMNS = [
+    "id", "name", "account_ref", "phone", "amount_due", "amount_collected", "amount_promised",
+    "due_date", "status", "last_call_summary", "next_action_at", "next_action",
+]
+CALL_COLUMNS = ["id", "debt_id", "started_at", "outcome", "transcript", "summary", "amount_promised", "promise_date"]
+SMS_COLUMNS = ["id", "debt_id", "payment_id", "sent_at", "type", "amount", "body", "payment_link", "payment_status"]
+MEMORY_COLUMNS = ["id", "debt_id", "key", "value", "learned_at"]
+ACTION_COLUMNS = ["id", "debt_id", "tool", "arguments", "result", "source", "at"]
+
+
 def _load(data: dict):
     with get_conn() as conn:
         for d in data.get("debts", []):
             conn.execute(
-                """INSERT OR REPLACE INTO debts
+                """INSERT INTO debts
                 (id, name, account_ref, phone, amount_due, amount_collected, amount_promised, due_date, status,
                  last_call_summary, next_action_at, next_action)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                + on_conflict_replace("id", DEBT_COLUMNS),
                 (
                     d["id"], d["name"], d.get("account_ref"), d["phone"], d["amount_due"],
                     d.get("amount_collected", 0), d.get("amount_promised", 0),
@@ -61,9 +72,10 @@ def _load(data: dict):
             )
         for c in data.get("calls", []):
             conn.execute(
-                """INSERT OR REPLACE INTO calls
+                """INSERT INTO calls
                 (id, debt_id, started_at, outcome, transcript, summary, amount_promised, promise_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)"""
+                + on_conflict_replace("id", CALL_COLUMNS),
                 (
                     c["id"], c["debt_id"], c["started_at"], c.get("outcome"),
                     c.get("transcript", ""), c.get("summary", ""),
@@ -72,9 +84,10 @@ def _load(data: dict):
             )
         for s in data.get("sms_messages", []):
             conn.execute(
-                """INSERT OR REPLACE INTO sms_messages
+                """INSERT INTO sms_messages
                 (id, debt_id, payment_id, sent_at, type, amount, body, payment_link, payment_status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                + on_conflict_replace("id", SMS_COLUMNS),
                 (
                     s["id"], s["debt_id"], s.get("payment_id"), s["sent_at"], s["type"],
                     s.get("amount"), s["body"], s.get("payment_link"), s.get("payment_status", "none"),
@@ -82,22 +95,24 @@ def _load(data: dict):
             )
         for m in data.get("memory", []):
             conn.execute(
-                """INSERT OR REPLACE INTO memory (id, debt_id, key, value, learned_at)
-                VALUES (?, ?, ?, ?, ?)""",
+                """INSERT INTO memory (id, debt_id, key, value, learned_at)
+                VALUES (?, ?, ?, ?, ?)"""
+                + on_conflict_replace("id", MEMORY_COLUMNS),
                 (m["id"], m["debt_id"], m["key"], m["value"], m["learned_at"]),
             )
         for a in data.get("agent_actions", []):
             conn.execute(
-                """INSERT OR REPLACE INTO agent_actions
+                """INSERT INTO agent_actions
                 (id, debt_id, tool, arguments, result, source, at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?, ?)"""
+                + on_conflict_replace("id", ACTION_COLUMNS),
                 (a["id"], a["debt_id"], a["tool"], a.get("arguments"), a.get("result"),
                  a.get("source", "voice"), a["at"]),
             )
         if "demo_clock" in data:
             dc = data["demo_clock"]
             conn.execute(
-                "UPDATE demo_clock SET current_time = ?, timezone = ?, speed = ? WHERE id = 1",
+                f"UPDATE demo_clock SET {CURRENT_TIME} = ?, timezone = ?, speed = ? WHERE id = 1",
                 (dc["current_time"], dc.get("timezone", config.DEMO_CLOCK_TIMEZONE), dc.get("speed", "paused")),
             )
 

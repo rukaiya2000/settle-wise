@@ -37,6 +37,22 @@ PUBLIC_PATH_PREFIXES = (
     "/login",
 )
 
+# Routes that stay behind the login even when PUBLIC_DEMO is on, because they
+# either destroy the demo or cost real money / contact real people. Matched on
+# (method, path fragment) since the read and the write of a debt share a URL.
+PROTECTED_ALWAYS = (
+    "/api/reset-demo",
+    "/delete",
+    "/api/debts/bulk-delete",
+    "/api/intelligence/rebuild",
+    "/sms",
+    "/call",  # covers /call and /call-agent - real outbound telephony
+)
+
+
+def _is_protected(path: str) -> bool:
+    return any(frag in path for frag in PROTECTED_ALWAYS)
+
 SESSION_COOKIE = "settlewise_session"
 SESSION_MAX_AGE = 7 * 24 * 3600  # 7 days
 
@@ -77,12 +93,16 @@ def resolve_credentials() -> tuple[str, str]:
 
 
 def session_secret() -> str:
-    """Key for signing session cookies, generated once per process start.
-    Restarting invalidates existing sessions - no persistent session
-    store, which is a fine trade for a demo's single admin account."""
+    """Key for signing session cookies.
+
+    SESSION_SECRET from the environment when set - required on any
+    deployment that can run more than one process: a per-process random key
+    means every cold start invalidates all sessions, and two instances
+    reject each other's cookies outright. Falls back to a generated value
+    for local runs, where a single process makes that moot."""
     global _session_secret
     if _session_secret is None:
-        _session_secret = secrets.token_hex(32)
+        _session_secret = os.getenv("SESSION_SECRET") or secrets.token_hex(32)
     return _session_secret
 
 
@@ -121,10 +141,16 @@ class SessionAuthMiddleware:
     navigation); an unauthenticated /api/* call gets a plain 401 so the
     dashboard's own fetch() wrapper can send the browser there itself."""
 
-    def __init__(self, app, username: str, public_prefixes: tuple[str, ...] = PUBLIC_PATH_PREFIXES):
+    def __init__(self, app, username: str, public_prefixes: tuple[str, ...] = PUBLIC_PATH_PREFIXES, public_demo: bool = False):
         self.app = app
         self.username = username
         self.public_prefixes = public_prefixes
+        # PUBLIC_DEMO opens browsing and the harmless writes (add a customer,
+        # advance the clock, run the simulated agent) to anyone with the link,
+        # so a shared demo is actually usable without handing out a password.
+        # PROTECTED_ALWAYS still applies - nobody anonymous can wipe the demo
+        # or trigger real telephony.
+        self.public_demo = public_demo
 
     def _authorized(self, scope) -> bool:
         headers = dict(scope.get("headers") or [])
@@ -141,7 +167,10 @@ class SessionAuthMiddleware:
             return
 
         path = scope["path"]
-        if any(path.startswith(p) for p in self.public_prefixes) or self._authorized(scope):
+        open_to_anyone = any(path.startswith(p) for p in self.public_prefixes) or (
+            self.public_demo and not _is_protected(path)
+        )
+        if open_to_anyone or self._authorized(scope):
             await self.app(scope, receive, send)
             return
 

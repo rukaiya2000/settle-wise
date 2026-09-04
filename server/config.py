@@ -52,6 +52,31 @@ OPENAI_POST_CALL_BASE_URL = os.getenv(
     "https://api.openai.com/v1" if OPENAI_REALTIME_API_KEY else (OPENAI_BASE_URL or "https://api.openai.com/v1"),
 )
 
+# Set DATABASE_URL to run on Postgres (Supabase, on the deployed instance);
+# leave it unset and everything uses the local SQLite file as before. Use
+# Supabase's *transaction pooler* (port 6543) rather than the direct 5432
+# connection - serverless opens many short-lived connections and will
+# exhaust the direct limit.
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+
+# Open the dashboard and the harmless writes to anyone with the link. The
+# destructive and real-telephony routes stay behind the login either way
+# (server/auth.py:PROTECTED_ALWAYS).
+PUBLIC_DEMO = os.getenv("PUBLIC_DEMO", "false").lower() == "true"
+
+# The voice stack (pipecat and its ~570MB of transitive deps: onnxruntime,
+# llvmlite, cv2, av, numba) is only needed for INBOUND a1mobile calls and
+# the in-browser WebRTC demo; outbound calling through Vapi doesn't touch
+# it, and the serverless deployment omits it to stay under the bundle size
+# limit. Unset means "on if pipecat is installed" - so local dev keeps
+# working untouched and the deploy turns it off by simply not shipping the
+# package. Set explicitly to force either way.
+ENABLE_VOICE = os.getenv("ENABLE_VOICE", "").lower() or None
+
+# Serverless cold starts shouldn't re-run CREATE TABLE on every request; the
+# schema is created once by scripts/migrate_to_postgres.py instead.
+SKIP_DB_INIT = os.getenv("SKIP_DB_INIT", "false").lower() == "true"
+
 DB_PATH = os.getenv("DB_PATH", str(BASE_DIR / "data" / "settlewise.db"))
 SEED_PATH = os.getenv("SEED_PATH", str(BASE_DIR / "data" / "seed.json"))
 

@@ -1,0 +1,14 @@
+# Dependencies for the Vercel deployment only.
+#
+# Deliberately excludes pipecat-ai, which pulls ~570MB of transitive deps
+# (onnxruntime, llvmlite, cv2, av, numba, scipy, sympy) and would blow
+# Vercel's 250MB unzipped bundle limit. It's only needed for inbound voice
+# and the in-browser WebRTC call - server/main.py skips those routes when
+# it isn't importable. Also excludes pytest/ruff (dev-only) and R (the
+# intelligence tables are computed locally and pushed with
+# scripts/sync_intelligence.py).
+fastapi==0.141.1
+python-dotenv==1.2.2
+python-multipart==0.0.32
+psycopg[binary]==3.3.5
+requests==2.34.2
