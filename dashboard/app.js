@@ -231,8 +231,10 @@ function renderTable() {
           <td>${segmentBadge(intelSummary[d.id])}</td>
           <td class="next-action">${nextAction}</td>
           <td>
-            <button class="row-run" data-call="${d.id}">Call</button>
-            <button class="row-run ghost" data-sms="${d.id}">SMS</button>
+            <div class="row-actions">
+              <button class="row-run" data-call="${d.id}">Call</button>
+              <button class="row-run ghost" data-sms="${d.id}">SMS</button>
+            </div>
           </td>
         </tr>
       `;

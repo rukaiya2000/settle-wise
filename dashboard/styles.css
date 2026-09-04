@@ -44,6 +44,16 @@
   --fs-xl: 20px;    /* view-level headings */
   --fs-2xl: 24px;   /* page-level headings, stat values */
   --fs-display: 36px; /* the one hero number (checkout amount) */
+
+  /* Control metrics. The type scale above gave font sizes one job each; the
+     gaps between buttons never got the same treatment, so the four places
+     buttons sit side by side had drifted to three different values (a 6px
+     margin hack, 8px and 10px) plus a stray 4px margin on the delete icon.
+     One gap token, and one height token so a cluster's buttons are the same
+     box whatever tier they are. */
+  --gap-actions: 8px;   /* between sibling controls, everywhere */
+  --control-h: 30px;    /* standard button height */
+  --control-h-sm: 26px; /* the compact in-table variant */
 }
 
 * { box-sizing: border-box; }
@@ -73,7 +83,7 @@ body {
 .clock {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--gap-actions);
   font-size: var(--fs-sm);
 }
 
@@ -97,6 +107,7 @@ button {
   background: var(--accent);
   color: #fff;
   padding: 6px 12px;
+  min-height: var(--control-h);
   border-radius: 6px;
   cursor: pointer;
 }
@@ -196,12 +207,26 @@ button.ghost:hover { background: var(--panel); }
 .row-run {
   font-size: var(--fs-xs);
   padding: 5px 10px;
+  min-height: var(--control-h-sm);
   white-space: nowrap;
 }
 
-.row-run + .row-run { margin-left: 6px; }
+/* The actions column is narrow enough that Call/SMS wrap to two lines on
+   most widths. They used to be inline-blocks separated by `.row-run +
+   .row-run { margin-left }`, and that margin kept applying after the wrap -
+   so the stacked button sat 6px right of the one above it, at its own
+   intrinsic width. Flex + gap spaces them without leaking into the wrapped
+   line, and the shared min-width keeps both edges flush either way. */
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--gap-actions);
+}
 
-.progress-actions { display: flex; gap: 8px; align-items: center; }
+.row-actions .row-run { min-width: 54px; }
+
+.progress-actions { display: flex; gap: var(--gap-actions); align-items: center; }
 
 /* Neutral until hover/focus, so a destructive action doesn't compete
    visually with the routine Call/SMS/Edit buttons beside it - discoverable,
@@ -210,10 +235,9 @@ button.ghost:hover { background: var(--panel); }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: var(--control-h);
+  height: var(--control-h);
   padding: 0;
-  margin-left: 4px;
   background: transparent;
   border: 1px solid var(--border-strong);
   color: var(--subtle);
@@ -590,6 +614,7 @@ button.ghost:hover { background: var(--panel); }
   right: 10px;
   width: 28px;
   height: 28px;
+  min-height: 0;
   padding: 0;
   font-size: var(--fs-xl);
   line-height: 1;
@@ -684,7 +709,7 @@ button.ghost:hover { background: var(--panel); }
 
 .view-head h1 { margin: 0; font-size: var(--fs-xl); }
 
-.view-head-actions { display: flex; align-items: center; gap: 10px; }
+.view-head-actions { display: flex; align-items: center; gap: var(--gap-actions); }
 
 .select-col { width: 36px; text-align: center; }
 .select-col input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); }
@@ -747,7 +772,7 @@ button.ghost:hover { background: var(--panel); }
 
 .field-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--gap-actions);
   margin-top: 4px;
 }
 
