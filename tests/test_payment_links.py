@@ -117,3 +117,67 @@ def test_mark_paid_still_allows_overpayment(debt):
     row = tools._debt_row(debt)
     assert row["amount_collected"] == 6000.0
     assert row["status"] == "paid"
+
+
+# -- round 2: findings from the second red-team pass -------------------------
+
+
+def test_link_sms_id_cannot_settle_a_different_debt(debt, monkeypatch):
+    """A link minted for one borrower must not be markable paid by crediting
+    another - the money landed on B while A's link was cleared."""
+    other = f"t_{uuid.uuid4().hex[:8]}"
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO debts (id, name, phone, amount_due, amount_collected, status) "
+            "VALUES (?, 'Other', '+15555550001', 900.0, 0.0, 'new')",
+            (other,),
+        )
+    link = tools.send_sms_payment_link(debt, amount=100)
+    tools.mark_paid(other, 100.0, sms_id=link["sms_id"])
+
+    with get_conn() as conn:
+        status = conn.execute(
+            "SELECT payment_status FROM sms_messages WHERE id = ?", (link["sms_id"],)
+        ).fetchone()[0]
+    assert status == "sent"
+
+
+@pytest.mark.parametrize("bad", ["paid\" onmouseover=\"alert(1)", "<script>", "not_a_status"])
+def test_status_must_be_a_known_value(debt, bad):
+    """status is rendered as a CSS class on the dashboard, so a free-text
+    value breaks out of the attribute."""
+    assert "error" in tools.update_debt_status(debt, status=bad)
+
+
+def test_call_summary_is_bounded(debt):
+    result = tools.update_debt_status(debt, status="new", last_call_summary="A" * 50_000)
+    assert len(result["last_call_summary"]) == tools.SUMMARY_MAX_CHARS
+
+
+def test_payment_link_sms_is_rate_limited(debt, monkeypatch):
+    """Superseding keeps one link payable but never capped how many texts
+    went out - real cost, and a harassment vector."""
+    sent = []
+    monkeypatch.setattr(tools.a1mobile_client, "send_sms", lambda to, body: sent.append(to) or {"ok": True})
+    for _ in range(20):
+        tools.send_sms_payment_link(debt, amount=50, live=True)
+    assert len(sent) == tools.MAX_PAYMENT_LINKS_PER_DAY
+
+
+def test_account_ref_brute_force_is_locked_out(debt):
+    results = [tools.verify_account_ref(debt, f"{i:04d}") for i in range(10)]
+    assert any(r.get("locked") for r in results)
+    assert results[-1]["verified"] is False
+
+
+def test_bool_is_not_a_payment_amount(debt):
+    """bool is an int subclass, so True quietly became a $1.00 link."""
+    assert "error" in tools.send_sms_payment_link(debt, amount=True)
+    assert "error" in tools.mark_paid(debt, True)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), "50", None])
+def test_discount_rejects_non_numbers_and_nan(debt, bad):
+    """NaN fails every comparison, so a bare range check approved it and
+    returned a NaN settlement."""
+    assert tools.apply_discount(debt, bad)["approved"] is False

@@ -17,6 +17,16 @@ from ..db import get_conn, row_to_dict
 from ..demo_clock import get_demo_now
 from ..policy import get_policy as _get_policy
 
+# The dashboard maps these to display labels and uses the raw value as a CSS
+# class; anything else both renders as a bare enum and injects into markup.
+VALID_STATUSES = {
+    "new", "scheduled", "calling", "no_answer", "callback_requested",
+    "promised", "link_sent", "missed", "paid", "needs_review",
+}
+SUMMARY_MAX_CHARS = 2000
+MAX_PAYMENT_LINKS_PER_DAY = 5
+MAX_REF_ATTEMPTS_PER_DAY = 5
+
 TERMINAL_STATUSES = {"paid", "needs_review"}
 
 
@@ -148,9 +158,29 @@ def verify_account_ref(debt_id: str, last4: str) -> dict:
         row = conn.execute("SELECT account_ref FROM debts WHERE id = ?", (debt_id,)).fetchone()
     if row is None:
         return {"error": f"No debt found for id {debt_id}"}
+    # A 4-digit space is small enough to walk end to end. Attempts are counted
+    # here rather than in the dispatcher so the limit holds for every caller,
+    # not just the production voice path.
+    today = get_demo_now().strftime("%Y-%m-%d")
+    with get_conn() as conn:
+        failed = conn.execute(
+            "SELECT COUNT(*) FROM agent_actions WHERE debt_id = ? AND tool = 'verify_account_ref' "
+            "AND result = 'failed' AND substr(at, 1, 10) = ?",
+            (debt_id, today),
+        ).fetchone()[0]
+    if failed >= MAX_REF_ATTEMPTS_PER_DAY:
+        return {"verified": False, "locked": True}
+
     supplied_digits = "".join(ch for ch in (last4 or "") if ch.isdigit())
     actual_digits = "".join(ch for ch in (row["account_ref"] or "") if ch.isdigit())
     verified = len(supplied_digits) == 4 and bool(actual_digits) and supplied_digits == actual_digits[-4:]
+    if not verified:
+        with get_conn() as conn:
+            conn.execute(
+                "INSERT INTO agent_actions (id, debt_id, tool, arguments, result, source, at) "
+                "VALUES (?, ?, 'verify_account_ref', NULL, 'failed', 'guard', ?)",
+                (f"act_{uuid.uuid4().hex[:8]}", debt_id, _now_iso()),
+            )
     return {"verified": verified}
 
 
@@ -213,11 +243,17 @@ def apply_discount(debt_id: str, requested_pct: float) -> dict:
     remaining = max(0.0, round(debt["amount_due"] - debt["amount_collected"], 2))
     settled = offer_engine.apply_discount(remaining, requested_pct, policy)
     if settled is None:
-        reason = (
-            f"requested discount cannot be negative ({requested_pct}%)"
-            if requested_pct < 0
-            else f"requested {requested_pct}% exceeds max {policy['max_discount_percent']}%"
-        )
+        # offer_engine already rejected it; this only phrases why. It must not
+        # re-compare the raw value - a non-numeric one would raise here.
+        try:
+            pct = float(requested_pct)
+            reason = (
+                f"requested discount cannot be negative ({pct:g}%)"
+                if pct < 0
+                else f"requested {pct:g}% exceeds max {policy['max_discount_percent']:g}%"
+            )
+        except (TypeError, ValueError):
+            reason = f"{requested_pct!r} is not a valid discount percentage"
         return {"approved": False, "reason": f"{reason} - route to human review"}
     return {"approved": True, "settled_amount": settled}
 
@@ -246,6 +282,17 @@ def record_call_event(
     return {"call_id": call_id, "debt_id": debt_id, "outcome": outcome}
 
 
+
+def _payment_links_today(debt_id: str) -> int:
+    """Payment links already texted to this debt today (demo clock)."""
+    today = get_demo_now().strftime("%Y-%m-%d")
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) FROM sms_messages WHERE debt_id = ? AND type = 'payment_link' "
+            "AND substr(sent_at, 1, 10) = ?",
+            (debt_id, today),
+        ).fetchone()[0]
+
 def send_sms_payment_link(debt_id: str, amount: float, reason: str = "", live: bool | None = None) -> dict:
     """Create a payment link and text it.
 
@@ -271,6 +318,8 @@ def send_sms_payment_link(debt_id: str, amount: float, reason: str = "", live: b
         return debt
 
     try:
+        if isinstance(amount, bool):  # bool is an int subclass -> True becomes $1
+            raise TypeError
         amount = float(amount)
     except (TypeError, ValueError):
         return {"error": f"amount must be a number, got {amount!r}"}
@@ -302,6 +351,11 @@ def send_sms_payment_link(debt_id: str, amount: float, reason: str = "", live: b
         )
 
     should_send = config.A1MOBILE_LIVE_SMS if live is None else live
+    if should_send and _payment_links_today(debt_id) > MAX_PAYMENT_LINKS_PER_DAY:
+        # Superseding keeps only one link *payable*, but nothing stopped the
+        # agent from texting a new one on every request - real cost, and a
+        # harassment vector, at the borrower's expense.
+        should_send = False
     sent_live = False
     if should_send:
         a1mobile_client.send_sms(to=debt["phone"], body=body)
@@ -371,10 +425,15 @@ def update_debt_status(
     if "error" in debt:
         return debt
 
+    if status not in VALID_STATUSES:
+        return {"error": f"unknown status {status!r} - must be one of {sorted(VALID_STATUSES)}"}
+
     fields, values = ["status = ?"], [status]
     if last_call_summary is not None:
+        # The dashboard renders this; it is written by the model from call
+        # content, so it is neither trusted nor bounded at the source.
         fields.append("last_call_summary = ?")
-        values.append(last_call_summary)
+        values.append(str(last_call_summary)[:SUMMARY_MAX_CHARS])
     if next_action is not None:
         fields.append("next_action = ?")
         values.append(next_action)
@@ -443,6 +502,8 @@ def mark_paid(debt_id: str, amount: float, sms_id: str | None = None) -> dict:
     # still allowed - duplicate payments and rounding drift are real, and
     # offer_engine already floors the remaining balance at zero.
     try:
+        if isinstance(amount, bool):  # bool is an int subclass -> True becomes $1
+            raise TypeError
         amount = float(amount)
     except (TypeError, ValueError):
         return {"error": f"amount must be a number, got {amount!r}"}
@@ -460,7 +521,13 @@ def mark_paid(debt_id: str, amount: float, sms_id: str | None = None) -> dict:
             (amount_collected, amount_promised, status, status, status, debt_id),
         )
         if sms_id:
-            conn.execute("UPDATE sms_messages SET payment_status = 'paid' WHERE id = ?", (sms_id,))
+            # Scoped to the debt being credited. Without the debt_id clause a
+            # link minted for one borrower could be passed in here and mark
+            # that borrower's link paid while the money landed on another.
+            conn.execute(
+                "UPDATE sms_messages SET payment_status = 'paid' WHERE id = ? AND debt_id = ?",
+                (sms_id, debt_id),
+            )
         conn.execute(
             """INSERT INTO sms_messages (id, debt_id, payment_id, sent_at, type, amount, body, payment_status)
             VALUES (?, ?, NULL, ?, 'confirmation', ?, ?, 'paid')""",

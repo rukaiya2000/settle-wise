@@ -18,6 +18,7 @@ import sys
 from openai import OpenAI
 
 from .. import config
+from ..vapi_setup import _debt_context
 from . import SYSTEM_PROMPT
 from .tool_registry import TOOL_DEFS
 
@@ -53,8 +54,14 @@ def run_console(debt_id: str, model: str = "gpt-4.1"):
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {
+            # The same context block the Vapi assistant gets. Without it the
+            # model has to open the call before it has looked anything up, and
+            # greets the borrower with a literal "{borrower's name}".
             "role": "system",
-            "content": f"The caller's debt_id is {debt_id}. Use get_debt_profile to confirm details before saying any amount.",
+            "content": (
+                f"The caller's debt_id is {debt_id}. Use get_debt_profile to confirm details "
+                f"before saying any amount.\n{_debt_context(debt_id)}"
+            ),
         },
         {"role": "user", "content": "(the phone just connected, start the call)"},
     ]

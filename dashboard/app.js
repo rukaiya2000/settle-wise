@@ -1,3 +1,8 @@
+// Everything the dashboard renders with innerHTML passes through this.
+// Borrower speech, agent-written call summaries and SMS bodies all reach
+// these templates, so they are untrusted text, not markup.
+const escapeHtml = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
 const money = (value) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(
     Number(value) || 0,
@@ -210,11 +215,11 @@ function renderTable() {
       return `
         <tr class="clickable" data-id="${d.id}">
           <td class="select-col">
-            <input type="checkbox" class="row-select" data-select="${d.id}" aria-label="Select ${d.name}" ${selectedIds.has(d.id) ? "checked" : ""} />
+            <input type="checkbox" class="row-select" data-select="${d.id}" aria-label="Select ${escapeHtml(d.name)}" ${selectedIds.has(d.id) ? "checked" : ""} />
           </td>
           <td>
-            <div class="borrower-name">${d.name}</div>
-            <div class="subtle">${d.phone}</div>
+            <div class="borrower-name">${escapeHtml(d.name)}</div>
+            <div class="subtle">${escapeHtml(d.phone)}</div>
           </td>
           <td>
             <strong>${money(outstanding)}</strong>
@@ -225,8 +230,8 @@ function renderTable() {
             <div class="subtle">${startLabel(d.due_date)}</div>
           </td>
           <td>
-            <span class="status ${d.status}">${statusLabel(d.status)}</span>
-            ${["needs_review", "missed", "no_answer", "scheduled", "callback_requested"].includes(d.status) && d.last_call_summary ? `<div class="status-reason">${d.last_call_summary}</div>` : ""}
+            <span class="status ${escapeHtml(d.status)}">${escapeHtml(statusLabel(d.status))}</span>
+            ${["needs_review", "missed", "no_answer", "scheduled", "callback_requested"].includes(d.status) && d.last_call_summary ? `<div class="status-reason">${escapeHtml(d.last_call_summary)}</div>` : ""}
           </td>
           <td>${segmentBadge(intelSummary[d.id])}</td>
           <td class="next-action">${nextAction}</td>
@@ -364,10 +369,10 @@ async function loadProgress(debtId) {
   // (wrong) assumption was that it related to the dates beside it.
   const flagged = ["needs_review", "missed", "no_answer", "scheduled", "callback_requested"].includes(d.status);
   const statusReason =
-    flagged && d.last_call_summary ? `<div class="status-reason">${d.last_call_summary}</div>` : "";
+    flagged && d.last_call_summary ? `<div class="status-reason">${escapeHtml(d.last_call_summary)}</div>` : "";
 
   const facts = [
-    ["Status", `<span class="status ${d.status}">${statusLabel(d.status)}</span>${statusReason}`],
+    ["Status", `<span class="status ${escapeHtml(d.status)}">${escapeHtml(statusLabel(d.status))}</span>${statusReason}`],
     ["Start date", `${formatDate(d.due_date)} <span class="subtle">${startLabel(d.due_date)}</span>`],
     [
       "Next action",
@@ -406,9 +411,9 @@ async function loadProgress(debtId) {
     ? calls
         .map((c) =>
           feedItem(
-            c.outcome ? c.outcome.replace(/_/g, " ") : "call",
+            escapeHtml(c.outcome ? c.outcome.replace(/_/g, " ") : "call"),
             formatClock(c.started_at),
-            `<div class="subtle">${c.summary || ""}</div>`,
+            `<div class="subtle">${escapeHtml(c.summary || "")}</div>`,
           ),
         )
         .reverse()
@@ -426,9 +431,9 @@ async function loadProgress(debtId) {
             link = `<div class="paid-tag">&check; Paid</div>`;
           }
           return feedItem(
-            s.type.replace(/_/g, " "),
-            `${formatClock(s.sent_at)} · ${s.payment_status}${s.amount ? " · " + money(s.amount) : ""}`,
-            `<div class="subtle">${s.body}</div>${link}`,
+            escapeHtml(s.type.replace(/_/g, " ")),
+            `${formatClock(s.sent_at)} · ${escapeHtml(s.payment_status)}${s.amount ? " · " + money(s.amount) : ""}`,
+            `<div class="subtle">${escapeHtml(s.body)}</div>${link}`,
           );
         })
         .reverse()
@@ -437,7 +442,7 @@ async function loadProgress(debtId) {
 
   const memory = detail.memory;
   document.querySelector("#memoryList").innerHTML = memory.length
-    ? memory.map((m) => feedItem(m.key.replace(/_/g, " "), formatClock(m.learned_at), `<div>${m.value}</div>`)).join("")
+    ? memory.map((m) => feedItem(escapeHtml(m.key.replace(/_/g, " ")), formatClock(m.learned_at), `<div>${escapeHtml(m.value)}</div>`)).join("")
     : '<div class="feed-empty">Nothing learned yet.</div>';
 
   renderLastCall(detail);
@@ -500,7 +505,7 @@ function renderLastCall(detail) {
       .map((line) => {
         const isAgent = /^(AI|Agent)\s*:/i.test(line);
         const text = line.replace(/^(AI|Agent|User|Borrower)\s*:\s*/i, "");
-        return `<div class="turn ${isAgent ? "agent" : "borrower"}"><span class="who">${isAgent ? "Agent" : "Borrower"}</span>${text}</div>`;
+        return `<div class="turn ${isAgent ? "agent" : "borrower"}"><span class="who">${isAgent ? "Agent" : "Borrower"}</span>${escapeHtml(text)}</div>`;
       })
       .join("");
   } else {
@@ -518,9 +523,9 @@ function renderLastCall(detail) {
           const kind = READ_TOOLS.has(a.tool) ? "read" : "write";
           return `
             <li class="step ${kind}">
-              <div class="step-title">${title}</div>
-              ${detailText ? `<div class="step-detail">${detailText}</div>` : ""}
-              <div class="step-tool">${a.tool}</div>
+              <div class="step-title">${escapeHtml(title)}</div>
+              ${detailText ? `<div class="step-detail">${escapeHtml(detailText)}</div>` : ""}
+              <div class="step-tool">${escapeHtml(a.tool)}</div>
             </li>`;
         })
         .join("")
@@ -1095,8 +1100,6 @@ document.addEventListener("keydown", (e) => {
 
 const pct = (v) => (v == null || Number.isNaN(Number(v)) ? "-" : `${Math.round(Number(v) * 100)}%`);
 const num = (v, d = 2) => (v == null || Number.isNaN(Number(v)) ? "-" : Number(v).toFixed(d));
-const escapeHtml = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-
 function segmentBadge(info) {
   if (!info || !info.segment_label) return '<span class="segment-badge none">-</span>';
   const cls = `c${(info.community ?? 0) % 8}${info.is_bridge ? " bridge" : ""}`;

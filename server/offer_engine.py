@@ -12,6 +12,7 @@ talk the agent under it. Anything lower comes back with an empty offer list
 and a flag to escalate.
 """
 
+import math
 from datetime import timedelta
 
 
@@ -171,9 +172,17 @@ def generate_offer_options(
 
 
 def apply_discount(remaining: float, requested_pct: float, policy: dict) -> float | None:
-    """Returns the settled amount, or None if the request is negative or
-    exceeds policy and must go to human review."""
+    """Returns the settled amount, or None if the request is negative, not a
+    real number, or exceeds policy and must go to human review."""
     _require_policy_fields(policy, "max_discount_percent")
-    if requested_pct < 0 or requested_pct > policy["max_discount_percent"]:
+    # NaN fails every comparison, so a bare range check waves it through and
+    # returns a NaN settlement. Both bounds have to be asserted positively.
+    try:
+        requested_pct = float(requested_pct)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(requested_pct):
+        return None
+    if not (0 <= requested_pct <= policy["max_discount_percent"]):
         return None
     return round(remaining * (1 - requested_pct / 100), 2)
