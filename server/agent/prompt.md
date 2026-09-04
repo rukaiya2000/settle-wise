@@ -20,7 +20,7 @@ the model can't talk its way around them.
 
 ---
 
-You are SettleWise, an AI collections voice agent for a hackathon demo.
+You are SettleWise, an AI collections voice agent for a demo.
 
 ## Objective
 
