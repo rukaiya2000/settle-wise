@@ -70,7 +70,9 @@
         </div>
       </div>
       <p class="subtle intel-intro">Analysis of the historical book in R: a behavioural similarity network, statistics that test what
-        it found, and one small model. Everything here is evidence for the agent - none of it can change an amount, a floor, or a status.</p>
+        it found, and one small model. Everything here is evidence for the agent - none of it can change an amount, a floor, or a status.
+        Two panels below reuse the same network and survival data through different lenses: a percolation/robustness check on the
+        network, and an epidemic-curve reframing of the survival analysis.</p>
 
       <div id="intelUnavailable" class="panel hidden"></div>
 
@@ -92,9 +94,51 @@
       </div>
 
       <section class="panel">
+        <div class="panel-head"><h3>Network robustness</h3><span id="robustnessMeta" class="subtle"></span></div>
+        <canvas id="robustnessCanvas" width="900" height="320"></canvas>
+        <div id="robustnessLegend" class="network-legend"></div>
+        <p class="subtle intel-copy">Two ways of deleting borrowers from the similarity network above, and what's left standing.
+          "Targeted" removes the highest-betweenness borrowers first &mdash; the same bridge borrowers ringed in the network chart,
+          who sit between behavioural communities. "Random" removes an equally-sized random sample, repeated 30 times and averaged,
+          as the baseline any network this size and density would show just from losing that many borrowers. If the targeted curve
+          falls further than random's noise band, the bridges are structurally load-bearing at that point in the sweep.</p>
+        <div id="robustnessNote" class="subtle network-def"></div>
+      </section>
+
+      <section class="panel">
         <div class="panel-head"><h3>Statistical findings</h3><span class="subtle">Benjamini-Hochberg adjusted; nothing shown without its sample size and uncertainty</span></div>
         <div id="findingsList" class="findings"></div>
       </section>
+
+      <div class="intel-grid">
+        <section class="panel">
+          <div class="panel-head">
+            <h3>Account states over time</h3>
+            <select id="epiCurveScope" class="scope-select" aria-label="Segment"></select>
+          </div>
+          <span class="subtle">restates the survival curve above as a running count</span>
+          <canvas id="epiCurveCanvas" width="760" height="360"></canvas>
+          <div id="epiCurveLegend" class="network-legend"></div>
+          <p class="subtle intel-copy">Every historical account moves through up to four states: not yet opened, active (in the
+            collections process), recovered (paid), or escalated (sent to human review &mdash; an absorbing exit from the process,
+            the same as a competing-risks censoring event). This uses the exact same event and censoring data as the Kaplan-Meier
+            curve above (<code>days_to_payment</code>/<code>observed</code>), just counted per calendar day instead of expressed
+            as a survival probability.</p>
+          <div id="epiCurveNote" class="subtle network-def"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h3>Reproduction number of the collections process (R<sub>eff</sub>)</h3><span class="subtle">&beta; &times; contact rate &times; duration, by segment</span></div>
+          <div id="reproductionCaveat" class="intel-callout"></div>
+          <div id="reproductionTable" class="intel-table"></div>
+          <p class="subtle intel-copy">&beta; (conversion per attempt): share of call attempts that end in an on-the-spot payment
+            agreement (<code>outcome = answered_paid</code>) &mdash; immediate conversions only; promises that convert later are
+            the slower pathway already covered by the reminder-effect finding above, not counted here. Contact rate: total call
+            attempts in the segment &divide; total account-days spent active. Duration: the restricted mean time an account spends
+            active before payment, escalation, or the horizon (Kaplan-Meier), all segments compared on the same horizon so the
+            numbers are comparable across segments.</p>
+        </section>
+      </div>
 
       <div class="intel-grid">
         <section class="panel">

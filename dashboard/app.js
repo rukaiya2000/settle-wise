@@ -1223,12 +1223,14 @@ async function loadIntelligenceView() {
   }
   unavailable.classList.add("hidden");
 
-  const [portfolio, network, stats, strategies, models] = await Promise.all([
+  const [portfolio, network, stats, strategies, models, epi, robustness] = await Promise.all([
     api("/api/intelligence/portfolio"),
     api("/api/intelligence/network"),
     api("/api/intelligence/statistics"),
     api("/api/intelligence/strategies"),
     api("/api/intelligence/models"),
+    api("/api/intelligence/epidemiology"),
+    api("/api/intelligence/robustness"),
   ]);
   renderPortfolio(portfolio, status);
   renderNetwork(network);
@@ -1236,6 +1238,9 @@ async function loadIntelligenceView() {
   renderFindings(stats.findings);
   renderStrategies(strategies);
   renderModels(models);
+  renderRobustness(robustness);
+  renderEpiCurve(epi.curve);
+  renderReproduction(epi.reproduction);
   document.querySelector("#intelBuildStatus").textContent = status.network ? `built ${formatClock(status.network.built_at)}` : "";
 }
 
@@ -1343,6 +1348,219 @@ function renderNetwork(net) {
       ? `${best.debt_id} · ${best.segment_label} · degree ${best.degree} · betweenness ${num(best.betweenness, 3)}${best.is_bridge ? " · bridge" : ""} · ${best.paid ? "paid" : "did not pay"}`
       : "";
   };
+}
+
+function themeColor(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+// Two removal strategies on the k-NN similarity graph: does taking out the
+// highest-betweenness "bridge" borrowers fragment it faster than removing
+// an equally-sized random sample? Both a line chart and the plain-English
+// verdict come straight from intelligence/R/07_percolation.R - the chart
+// never invents its own interpretation.
+function renderRobustness(data) {
+  const canvas = document.querySelector("#robustnessCanvas");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const curve = data.curve || [];
+  const summary = data.summary || {};
+
+  document.querySelector("#robustnessMeta").textContent =
+    summary.n_bridge_nodes != null
+      ? `${summary.n_bridge_nodes} bridge borrowers · robustness gap ${num(summary.robustness_gap, 3)}${
+          summary.onset_fraction != null ? ` · diverges past ${pct(summary.onset_fraction)} removed` : " · no divergence in the tested range"
+        }`
+      : "";
+  document.querySelector("#robustnessNote").textContent = summary.interpretation || "";
+  if (!curve.length) return;
+
+  const targeted = curve.filter((r) => r.strategy === "targeted").sort((a, b) => a.removal_fraction - b.removal_fraction);
+  const random = curve.filter((r) => r.strategy === "random").sort((a, b) => a.removal_fraction - b.removal_fraction);
+
+  const padL = 40;
+  const padR = 16;
+  const padT = 14;
+  const padB = 26;
+  const maxX = Math.max(...curve.map((r) => r.removal_fraction));
+  const sx = (f) => padL + (f / maxX) * (W - padL - padR);
+  const sy = (v) => padT + (1 - v) * (H - padT - padB);
+
+  ctx.strokeStyle = "rgba(154,163,175,0.14)";
+  ctx.fillStyle = themeColor("--subtle");
+  ctx.font = "10px system-ui";
+  ctx.lineWidth = 1;
+  for (const frac of [0, 0.25, 0.5, 0.75, 1]) {
+    const y = sy(frac);
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(W - padR, y);
+    ctx.stroke();
+    ctx.fillText(`${Math.round(frac * 100)}%`, 4, y + 3);
+  }
+  for (const frac of [0, 0.25, 0.5, 0.75, maxX]) {
+    ctx.fillText(`${Math.round(frac * 100)}%`, sx(frac) - 10, H - padB + 15);
+  }
+
+  // Shaded +-1 SD band around the random-removal mean, so "targeted falls
+  // outside random's own noise" is something you can see, not just read.
+  ctx.beginPath();
+  random.forEach((r, i) => {
+    const x = sx(r.removal_fraction);
+    const y = sy(Math.min(1, r.lcc_fraction + (r.lcc_fraction_sd || 0)));
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  for (let i = random.length - 1; i >= 0; i--) {
+    const r = random[i];
+    ctx.lineTo(sx(r.removal_fraction), sy(Math.max(0, r.lcc_fraction - (r.lcc_fraction_sd || 0))));
+  }
+  ctx.closePath();
+  ctx.fillStyle = "rgba(154,163,175,0.18)";
+  ctx.fill();
+
+  const drawLine = (rows, color) => {
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    rows.forEach((r, i) => {
+      const x = sx(r.removal_fraction);
+      const y = sy(r.lcc_fraction);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  };
+  drawLine(random, themeColor("--subtle"));
+  drawLine(targeted, themeColor("--red"));
+
+  document.querySelector("#robustnessLegend").innerHTML = [
+    ["targeted (highest betweenness first)", themeColor("--red")],
+    ["random (avg of 30 draws, shaded ±1 SD)", themeColor("--subtle")],
+  ]
+    .map(([label, color]) => `<span><i class="swatch line" style="background:${color}"></i>${escapeHtml(label)}</span>`)
+    .join("");
+}
+
+let EPI_CURVE_ROWS = [];
+
+// SIR-style restatement of the survival data: every historical account
+// moves S -> Active -> {Recovered | Escalated}. Numerically tied to the
+// Kaplan-Meier curve above (same days_to_payment/observed basis), just
+// counted as running totals over calendar time.
+function renderEpiCurve(curve) {
+  EPI_CURVE_ROWS = curve || [];
+  const select = document.querySelector("#epiCurveScope");
+  const labels = [...new Set(EPI_CURVE_ROWS.map((r) => r.segment_label))].sort((a, b) =>
+    a === "All segments" ? -1 : b === "All segments" ? 1 : a.localeCompare(b),
+  );
+  select.innerHTML = labels.map((l) => `<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join("");
+  select.value = "All segments";
+  select.onchange = () => drawEpiCurve(select.value);
+  drawEpiCurve(select.value);
+}
+
+function drawEpiCurve(scope) {
+  const canvas = document.querySelector("#epiCurveCanvas");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const rows = EPI_CURVE_ROWS.filter((r) => r.segment_label === scope).sort((a, b) => a.day.localeCompare(b.day));
+  if (!rows.length) return;
+  const n = rows[0].n_cohort;
+
+  const colors = {
+    n_susceptible: themeColor("--subtle"),
+    n_active: themeColor("--blue"),
+    n_recovered: themeColor("--green"),
+    n_escalated: themeColor("--red"),
+  };
+  const labelFor = {
+    n_susceptible: "Susceptible (not yet opened)",
+    n_active: "Active (in collections)",
+    n_recovered: "Recovered (paid)",
+    n_escalated: "Escalated (human review)",
+  };
+
+  const padL = 44;
+  const padR = 16;
+  const padT = 14;
+  const padB = 26;
+  const sx = (i) => padL + (i / Math.max(1, rows.length - 1)) * (W - padL - padR);
+  const sy = (v) => padT + (1 - v / n) * (H - padT - padB);
+
+  ctx.strokeStyle = "rgba(154,163,175,0.14)";
+  ctx.fillStyle = themeColor("--subtle");
+  ctx.font = "10px system-ui";
+  for (const frac of [0, 0.25, 0.5, 0.75, 1]) {
+    const y = sy(frac * n);
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(W - padR, y);
+    ctx.stroke();
+    ctx.fillText(String(Math.round(frac * n)), 2, y + 3);
+  }
+  ctx.fillText(rows[0].day, padL, H - padB + 15);
+  ctx.fillText(rows[rows.length - 1].day, W - padR - 66, H - padB + 15);
+
+  let base = new Array(rows.length).fill(0);
+  for (const key of ["n_susceptible", "n_active", "n_recovered", "n_escalated"]) {
+    const top = rows.map((r, i) => base[i] + (r[key] || 0));
+    ctx.beginPath();
+    rows.forEach((r, i) => {
+      const x = sx(i);
+      const y = sy(top[i]);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    for (let i = rows.length - 1; i >= 0; i--) ctx.lineTo(sx(i), sy(base[i]));
+    ctx.closePath();
+    ctx.fillStyle = colors[key];
+    ctx.globalAlpha = 0.85;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    base = top;
+  }
+
+  document.querySelector("#epiCurveLegend").innerHTML = Object.entries(labelFor)
+    .map(([key, label]) => `<span><i class="swatch" style="background:${colors[key]}"></i>${escapeHtml(label)}</span>`)
+    .join("");
+
+  const last = rows[rows.length - 1];
+  document.querySelector("#epiCurveNote").textContent =
+    `As of ${last.day} (${scope}, n=${n}): ${pct(last.n_recovered / n)} paid, ${pct(last.n_escalated / n)} escalated, ` +
+    `${pct(last.n_active / n)} still active, ${pct(last.n_susceptible / n)} not yet opened.`;
+}
+
+// R_eff = beta x contact-rate x duration, per segment - a load indicator on
+// the collections process (not a claim of person-to-person transmission;
+// see the caveat text, sourced verbatim from intelligence/R/06_epidemiology.R).
+function renderReproduction(rows) {
+  rows = rows || [];
+  document.querySelector("#reproductionCaveat").textContent = rows[0]?.limitation_note
+    ? `${rows[0].limitation_note} This is not an epidemic - borrowers cannot "infect" one another; there is no person-to-person transmission in a collections process. Read R_eff as a load indicator on the collections process, not a forecast of runaway growth.`
+    : "";
+  const trs = rows
+    .map(
+      (r) => `
+      <tr>
+        <td>${escapeHtml(r.segment_label)}</td>
+        <td class="num">${r.n}</td>
+        <td class="num">${pct(r.beta)}<div class="ci">${r.beta_n_attempts} attempts</div></td>
+        <td class="num">${num(r.c_contacts_per_active_day, 2)}</td>
+        <td class="num">${num(r.d_days, 1)}d</td>
+        <td class="num"><b>${num(r.r_eff, 2)}</b><div class="ci">${num(r.r_eff_ci_low, 2)}-${num(r.r_eff_ci_high, 2)}</div></td>
+      </tr>`,
+    )
+    .join("");
+  document.querySelector("#reproductionTable").innerHTML = `
+    <table>
+      <thead><tr><th>Segment</th><th class="num">n</th><th class="num">&beta;</th><th class="num">Contacts/active-day</th><th class="num">Duration</th><th class="num">R<sub>eff</sub> (95% CI)</th></tr></thead>
+      <tbody>${trs}</tbody>
+    </table>`;
 }
 
 function renderSegments(segments) {

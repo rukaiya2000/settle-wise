@@ -210,6 +210,76 @@ CREATE TABLE IF NOT EXISTS graph_edges (
     PRIMARY KEY (source, target)
 );
 
+-- Daily S/Active/Recovered/Escalated counts, restating the survival basis
+-- (days_to_payment/observed/final_outcome) already used for the Kaplan-Meier
+-- curve as cumulative state counts over calendar time instead of a
+-- probability over time-since-open. Written by intelligence/R/06_epidemiology.R.
+CREATE TABLE IF NOT EXISTS epi_curve_daily (
+    day TEXT NOT NULL,
+    segment_label TEXT NOT NULL,
+    n_susceptible INTEGER NOT NULL,
+    n_active INTEGER NOT NULL,
+    n_recovered INTEGER NOT NULL,
+    n_escalated INTEGER NOT NULL,
+    n_cohort INTEGER NOT NULL,
+    graph_version TEXT,
+    epi_version TEXT,
+    created_at TEXT,
+    PRIMARY KEY (day, segment_label)
+);
+
+-- Effective "reproduction number" per segment: R_eff = beta (per-attempt
+-- conversion) x contact rate x duration. Explicitly not a claim of
+-- borrower-to-borrower transmission - see limitation_note - it measures
+-- whether outreach resolves accounts faster than they age into escalation.
+CREATE TABLE IF NOT EXISTS epi_reproduction (
+    segment_label TEXT PRIMARY KEY,
+    n INTEGER,
+    beta REAL,
+    beta_n_attempts INTEGER,
+    c_contacts_per_active_day REAL,
+    total_calls INTEGER,
+    total_active_days REAL,
+    d_days REAL,
+    d_tau_days REAL,
+    r_eff REAL,
+    r_eff_ci_low REAL,
+    r_eff_ci_high REAL,
+    limitation_note TEXT,
+    epi_version TEXT,
+    created_at TEXT
+);
+
+-- Percolation robustness of the k-NN similarity graph: largest-connected-
+-- component fraction remaining as borrowers are removed, targeted
+-- (highest betweenness first) vs random. Written by
+-- intelligence/R/07_percolation.R.
+CREATE TABLE IF NOT EXISTS network_robustness (
+    graph_version TEXT NOT NULL,
+    removal_fraction REAL NOT NULL,
+    strategy TEXT NOT NULL,
+    n_removed INTEGER,
+    lcc_fraction REAL,
+    lcc_fraction_sd REAL,
+    n_reps INTEGER,
+    PRIMARY KEY (graph_version, removal_fraction, strategy)
+);
+
+CREATE TABLE IF NOT EXISTS network_robustness_summary (
+    graph_version TEXT PRIMARY KEY,
+    auc_targeted REAL,
+    auc_random_mean REAL,
+    auc_random_sd REAL,
+    robustness_gap REAL,
+    -- Smallest removal_fraction where targeted removal drops more than 2
+    -- random-removal SDs below the random baseline; NULL if that never
+    -- happens across the tested sweep (see intelligence/R/07_percolation.R).
+    onset_fraction REAL,
+    n_bridge_nodes INTEGER,
+    interpretation TEXT,
+    created_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS recommendations (
     recommendation_id TEXT PRIMARY KEY,
     debt_id TEXT NOT NULL,
@@ -234,6 +304,10 @@ R_OUTPUT_TABLES = [
     "network_metrics",
     "graph_nodes",
     "graph_edges",
+    "epi_curve_daily",
+    "epi_reproduction",
+    "network_robustness",
+    "network_robustness_summary",
 ]
 
 

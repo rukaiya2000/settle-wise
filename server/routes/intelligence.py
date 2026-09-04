@@ -118,6 +118,28 @@ def network():
     return {"metrics": metrics, "nodes": nodes, "edges": edges, "segments": segments}
 
 
+@router.get("/epidemiology")
+def epidemiology():
+    """SIR-style daily state curve plus the per-segment R_eff table, both
+    written by intelligence/R/06_epidemiology.R."""
+    with get_conn() as conn:
+        curve = rows_to_dicts(conn, "SELECT * FROM epi_curve_daily ORDER BY segment_label, day")
+        reproduction = rows_to_dicts(conn, "SELECT * FROM epi_reproduction ORDER BY r_eff DESC")
+    return {"curve": curve, "reproduction": reproduction}
+
+
+@router.get("/robustness")
+def robustness():
+    """Percolation robustness curve (targeted vs random borrower removal)
+    plus its summary, both written by intelligence/R/07_percolation.R."""
+    with get_conn() as conn:
+        curve = rows_to_dicts(conn, "SELECT * FROM network_robustness ORDER BY strategy, removal_fraction")
+        summary = row_to_dict(
+            conn.execute("SELECT * FROM network_robustness_summary ORDER BY graph_version DESC LIMIT 1").fetchone()
+        )
+    return {"curve": curve, "summary": summary}
+
+
 @router.get("/portfolio")
 def portfolio():
     """Portfolio-level numbers, all computed from stored rows (no UI
