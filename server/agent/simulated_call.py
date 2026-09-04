@@ -2,7 +2,7 @@
 
 Drives the exact same tools the live realtime agent uses
 (server/agent/tools.py), so a call fired by the demo-clock scheduler and a
-real a1mobile phone call produce identically-shaped calls/sms_messages/
+real phone call produce identically-shaped calls/sms_messages/
 memory/debts rows. Outcomes are seeded off debt_id + attempt number so a
 given demo replay is reproducible, not actually random.
 """

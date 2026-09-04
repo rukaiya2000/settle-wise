@@ -24,15 +24,14 @@ app.include_router(payment.router)
 app.include_router(vapi.router)
 app.include_router(sms.router)
 
-# Inbound voice and the in-browser WebRTC call both import pipecat at module
-# level, which the serverless deployment deliberately doesn't ship (see
-# config.ENABLE_VOICE). Import them lazily so a missing pipecat is a skipped
-# feature rather than a failed boot.
+# The in-browser WebRTC call imports pipecat at module level, which the
+# serverless deployment deliberately doesn't ship (see config.ENABLE_VOICE).
+# Import it lazily so a missing pipecat is a skipped feature rather than a
+# failed boot.
 if config.ENABLE_VOICE != "false":
     try:
-        from .routes import browser_call, voice
+        from .routes import browser_call
 
-        app.include_router(voice.router)
         app.include_router(browser_call.router)
     except ImportError as e:
         if config.ENABLE_VOICE == "true":

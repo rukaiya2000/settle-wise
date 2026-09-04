@@ -3,8 +3,8 @@
 Fires every debt's due next_action, in chronological order, up to the
 target time - this is what lets advancing the demo clock replay days of
 collections activity in one call. enqueue_voice_call routes to the
-deterministic simulator rather than a live phone call; the real a1mobile/
-realtime pipeline is only used for the explicit live-call demo moment.
+deterministic simulator rather than a live phone call; a real call through
+Vapi is a separate, explicit path.
 """
 
 from .db import get_conn

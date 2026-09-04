@@ -8,11 +8,9 @@ The number dialled *from* is a Vapi-hosted one: buy or import it in the
 Vapi dashboard and put its id in VAPI_PHONE_NUMBER_ID. `numbers` lists
 what the account already has so the id can be copied from there.
 
-This used to dial from the claimed a1mobile number over a BYO SIP trunk,
-which is gone - it inherited a1mobile's SIP credential problems, and
-outbound INVITEs came back 403 Forbidden. a1mobile still handles inbound
-calls (server/routes/voice.py) and SMS (server/a1mobile_client.py);
-only the outbound leg moved.
+An earlier version dialled over a BYO SIP trunk from a hackathon telephony
+provider; that provider is gone and so is the trunk. Calling is Vapi-hosted
+end to end.
 
     .venv/bin/python -m server.vapi_setup setup
     .venv/bin/python -m server.vapi_setup numbers

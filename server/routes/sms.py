@@ -1,8 +1,7 @@
 """Send an SMS to a borrower from the dashboard.
 
-a1mobile only delivers to numbers your team has OTP-verified (or organizer
-test lines) - no cold outreach - so sending to an unverified number fails at
-the provider. That error is surfaced rather than swallowed.
+A provider rejection (or no provider configured at all - see
+server/sms_client.py) is surfaced to the person who clicked, not swallowed.
 """
 
 import requests
@@ -10,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
+from .. import sms_client
 from ..agent import tools as agent_tools
 
 router = APIRouter()
@@ -31,15 +31,12 @@ def send_sms(debt_id: str, req: SmsRequest):
         result = agent_tools.send_sms_now(
             debt_id, body=req.body, sms_type=req.type, amount=req.amount
         )
+    except sms_client.SmsNotConfigured as e:
+        raise HTTPException(503, str(e))
     except requests.HTTPError as e:
         detail = e.response.text if e.response is not None else str(e)
         logger.warning(f"SMS to {debt.get('phone')} rejected: {detail}")
-        raise HTTPException(
-            502,
-            f"a1mobile rejected the message: {detail}. "
-            "Numbers must be OTP-verified first "
-            "(python -m server.a1mobile_client verify \"<number>\").",
-        )
+        raise HTTPException(502, f"SMS provider rejected the message: {detail}")
 
     if "error" in result:
         raise HTTPException(400, result["error"])

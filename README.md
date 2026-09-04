@@ -76,22 +76,17 @@ Dashboard "Call borrower"
   → POST /api/vapi/events (transcript + summary when the call ends)
 ```
 
-**Why Vapi is in the middle.** The hackathon telephony provider (a1mobile)
-has no outbound calling — confirmed four ways: no dial tool in its MCP
-catalog, every REST endpoint guess 404s, Telnyx's own Dial API needs
-credentials only a1mobile holds, and a raw SIP `INVITE` never completes
-digest auth even though `REGISTER` succeeds. So Vapi dials, on a
-Vapi-hosted number (`VAPI_PHONE_NUMBER_ID`, listed by
-`python -m server.vapi_setup numbers`), and we keep the logic.
+**Why Vapi is in the middle.** Vapi dials, on a Vapi-hosted number
+(`VAPI_PHONE_NUMBER_ID`, listed by `python -m server.vapi_setup numbers`),
+and runs the voice loop; we keep the logic - every tool call comes back to
+this server, where the offer engine and the database decide. An earlier
+version dialled over a BYO SIP trunk from a hackathon telephony provider;
+that provider has since been shut down and nothing depends on it.
 
-An earlier version dialled from the claimed a1mobile number by registering
-its SIP credentials as a Vapi BYO trunk. That's gone: it inherited
-a1mobile's SIP credential problems, and outbound `INVITE`s came back
-`403 Forbidden`. a1mobile is now only on the inbound and SMS paths.
-
-**Inbound is a different path.** Someone calling the claimed number hits
-a1mobile's webhook at `/voice`, and our own Pipecat pipeline handles it with
-OpenAI's realtime model. Same tools, same database, different voice stack.
+**SMS has no provider wired.** `server/sms_client.py` is a one-function
+seam. Texts are always recorded in the SMS history; they are only sent when
+`LIVE_SMS=true` *and* a provider (Twilio, Telnyx, ...) is implemented there.
+The demo never needs one.
 
 ## Repayment runs on a cycle
 

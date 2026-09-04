@@ -12,7 +12,7 @@ stays auditable and can't hallucinate numbers.
 import math
 import uuid
 
-from .. import a1mobile_client, config, offer_engine
+from .. import config, offer_engine, sms_client
 from ..db import get_conn, row_to_dict
 from ..demo_clock import get_demo_now
 from ..policy import get_policy as _get_policy
@@ -299,7 +299,7 @@ def send_sms_payment_link(debt_id: str, amount: float, reason: str = "", live: b
     `live` decides whether a real SMS goes out. The agent calls this during
     an actual conversation and passes live=True - a borrower who has just
     agreed to pay must actually receive the link. The simulator and the
-    demo-clock scheduler leave it None, falling back to A1MOBILE_LIVE_SMS,
+    demo-clock scheduler leave it None, falling back to LIVE_SMS,
     so replaying 30 days of activity never texts anyone.
 
     The amount is validated here rather than trusted. offer_engine caps what
@@ -350,7 +350,7 @@ def send_sms_payment_link(debt_id: str, amount: float, reason: str = "", live: b
             (sms_id, debt_id, payment_id, _now_iso(), amount, body, link_path),
         )
 
-    should_send = config.A1MOBILE_LIVE_SMS if live is None else live
+    should_send = config.LIVE_SMS if live is None else live
     if should_send and _payment_links_today(debt_id) > MAX_PAYMENT_LINKS_PER_DAY:
         # Superseding keeps only one link *payable*, but nothing stopped the
         # agent from texting a new one on every request - real cost, and a
@@ -358,7 +358,7 @@ def send_sms_payment_link(debt_id: str, amount: float, reason: str = "", live: b
         should_send = False
     sent_live = False
     if should_send:
-        a1mobile_client.send_sms(to=debt["phone"], body=body)
+        sms_client.send_sms(to=debt["phone"], body=body)
         sent_live = True
 
     result = {
@@ -589,7 +589,7 @@ def check_payment_status(debt_id: str) -> dict:
 def send_sms_now(debt_id: str, body: str | None = None, sms_type: str = "custom", amount: float | None = None) -> dict:
     """Send an SMS to the borrower for real, right now, and record it.
 
-    Deliberately not gated behind config.A1MOBILE_LIVE_SMS the way
+    Deliberately not gated behind config.LIVE_SMS the way
     send_sms_payment_link is. That gate exists so scheduled replays and the
     simulator never text anyone by accident; this function is only reached
     from an explicit human click in the dashboard, where actually sending is
@@ -616,9 +616,9 @@ def send_sms_now(debt_id: str, body: str | None = None, sms_type: str = "custom"
     elif not body:
         body = f"Reminder from SettleWise: ${remaining:g} is outstanding on your account."
 
-    # Send before recording, so a rejected message (e.g. a number that was
-    # never OTP-verified) surfaces as an error instead of a phantom row.
-    send_result = a1mobile_client.send_sms(to=debt["phone"], body=body)
+    # Send before recording, so a rejected message (or no provider at all)
+    # surfaces as an error instead of a phantom row.
+    send_result = sms_client.send_sms(to=debt["phone"], body=body)
 
     sms_id = f"sms_{uuid.uuid4().hex[:8]}"
     with get_conn() as conn:

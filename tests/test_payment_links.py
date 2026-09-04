@@ -25,7 +25,7 @@ def debt(monkeypatch, tmp_path):
     demo data and never text anyone."""
     db_file = tmp_path / "test.db"
     monkeypatch.setattr(config, "DB_PATH", str(db_file))
-    monkeypatch.setattr(tools.a1mobile_client, "send_sms", lambda to, body: {"stubbed": True})
+    monkeypatch.setattr(tools.sms_client, "send_sms", lambda to, body: {"stubbed": True})
     init_db()
     debt_id = f"t_{uuid.uuid4().hex[:8]}"
     with get_conn() as conn:
@@ -158,7 +158,7 @@ def test_payment_link_sms_is_rate_limited(debt, monkeypatch):
     """Superseding keeps one link payable but never capped how many texts
     went out - real cost, and a harassment vector."""
     sent = []
-    monkeypatch.setattr(tools.a1mobile_client, "send_sms", lambda to, body: sent.append(to) or {"ok": True})
+    monkeypatch.setattr(tools.sms_client, "send_sms", lambda to, body: sent.append(to) or {"ok": True})
     for _ in range(20):
         tools.send_sms_payment_link(debt, amount=50, live=True)
     assert len(sent) == tools.MAX_PAYMENT_LINKS_PER_DAY

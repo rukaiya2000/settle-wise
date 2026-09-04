@@ -1,11 +1,8 @@
-"""Browser-based voice call - the substitute for outbound calling.
+"""Browser-based voice call.
 
-a1mobile has no outbound-calling capability (confirmed via its MCP tool
-catalog: claim_number, point_number, send_confirmation_sms,
-request/confirm_number_verification - no dial/call tool exists anywhere).
-This exposes Pipecat's SmallWebRTC signaling endpoint so a browser tab can
-open a live mic/speaker session straight to the same realtime agent used for
-real a1mobile calls - no phone number needed.
+Exposes Pipecat's SmallWebRTC signaling endpoint so a browser tab can open
+a live mic/speaker session straight to the realtime agent - the same tools
+and database as a phone call, no phone number needed.
 """
 
 from fastapi import APIRouter, BackgroundTasks

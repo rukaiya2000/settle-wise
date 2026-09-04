@@ -21,7 +21,7 @@ router = APIRouter()
 
 # E.164-ish: optional leading +, 8-15 digits, no leading 0. Loose enough for
 # international numbers, strict enough to catch the obvious junk ("we") that
-# would otherwise reach a1mobile at call/SMS time instead of at entry.
+# would otherwise reach the telephony provider at call/SMS time instead of at entry.
 PHONE_RE = re.compile(r"^\+?[1-9]\d{7,14}$")
 
 
@@ -291,8 +291,8 @@ def get_debt_sms(debt_id: str):
 def run_agent(debt_id: str, force: bool = False):
     """Manual 'Run agent' button. Runs the deterministic simulator - the same
     engine the demo-clock scheduler fires - so a click here behaves exactly
-    like a due scheduled action. The live a1mobile/realtime phone call is a
-    separate, explicit path (server/routes/voice.py), not this endpoint."""
+    like a due scheduled action. A live phone call is a separate, explicit
+    path (server/routes/vapi.py), not this endpoint."""
     debt = agent_tools.get_debt_profile(debt_id)
     if "error" in debt:
         raise HTTPException(404, "not found")

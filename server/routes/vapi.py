@@ -1,11 +1,7 @@
 """Vapi tool webhook - outbound calling path.
 
-a1mobile's own API has no outbound-calling capability (confirmed: its MCP
-catalog exposes only claim/point/SMS/verify tools, every guessed REST
-endpoint 404s, and a raw SIP INVITE with the claimed credentials never
-completes digest auth even though REGISTER succeeds). Outbound goes
-through Vapi instead, dialling from a Vapi-hosted number
-(VAPI_PHONE_NUMBER_ID) - a1mobile is not on this path at all.
+Outbound goes through Vapi, dialling from a Vapi-hosted number
+(VAPI_PHONE_NUMBER_ID).
 
 That means Vapi runs the voice loop (its own STT/LLM/TTS) rather than our
 Pipecat pipeline, so the agent reaches our negotiation logic through this

@@ -6,10 +6,6 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-A1MOBILE_BASE_URL = os.getenv("A1MOBILE_BASE_URL", "https://hack.a1mobile.com")
-A1MOBILE_TEAM_KEY = os.getenv("A1MOBILE_TEAM_KEY", "")
-A1MOBILE_PHONE_NUMBER = os.getenv("A1MOBILE_PHONE_NUMBER", "")
-
 # Vapi (outbound calling). VAPI_PRIVATE_KEY is set by hand, VAPI_ASSISTANT_ID
 # is written by `python -m server.vapi_setup setup`, and VAPI_PHONE_NUMBER_ID
 # is the Vapi-hosted number to dial from (`vapi_setup numbers` lists them).
@@ -32,10 +28,10 @@ VAPI_VOICE_PROVIDER = os.getenv("VAPI_VOICE_PROVIDER", "openai")
 # No trailing slash, e.g. https://abcd1234.ngrok-free.app
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 
-# Gate on actually sending SMS through a1mobile. Off by default so the
-# simulated demo loop never texts anyone; flip to true only for the live
-# verified-number demo call.
-A1MOBILE_LIVE_SMS = os.getenv("A1MOBILE_LIVE_SMS", "false").lower() == "true"
+# Gate on actually sending SMS (server/sms_client.py). Off by default so the
+# simulated demo loop never texts anyone; flip to true only for a live demo
+# call, once a provider is implemented.
+LIVE_SMS = os.getenv("LIVE_SMS", "false").lower() == "true"
 
 # Hackathon AI gateway (HTTP-only, /responses endpoint) - not used for the
 # voice agent itself since it can't proxy the realtime WebSocket API.
@@ -65,8 +61,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 PUBLIC_DEMO = os.getenv("PUBLIC_DEMO", "false").lower() == "true"
 
 # The voice stack (pipecat and its ~570MB of transitive deps: onnxruntime,
-# llvmlite, cv2, av, numba) is only needed for INBOUND a1mobile calls and
-# the in-browser WebRTC demo; outbound calling through Vapi doesn't touch
+# llvmlite, cv2, av, numba) is only needed for the in-browser WebRTC demo; outbound calling through Vapi doesn't touch
 # it, and the serverless deployment omits it to stay under the bundle size
 # limit. Unset means "on if pipecat is installed" - so local dev keeps
 # working untouched and the deploy turns it off by simply not shipping the
