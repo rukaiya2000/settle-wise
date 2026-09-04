@@ -153,6 +153,16 @@ def robustness():
     return {"curve": curve, "summary": summary}
 
 
+@router.get("/scenarios")
+def scenarios():
+    """Intervention scenario sweep (strategy x targeting rule x budget) and
+    its per-strategy summaries, written by intelligence/R/08_scenarios.R."""
+    with get_conn() as conn:
+        curve = rows_to_dicts(conn, "SELECT * FROM scenario_outcomes ORDER BY strategy, targeting, k")
+        summary = rows_to_dicts(conn, "SELECT * FROM scenario_summary ORDER BY strategy")
+    return {"curve": curve, "summary": summary}
+
+
 @router.get("/portfolio")
 def portfolio():
     """Portfolio-level numbers, all computed from stored rows (no UI

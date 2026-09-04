@@ -28,6 +28,16 @@ check <- function(name, cond) {
 
 close_to <- function(a, b, tol = 1e-6) abs(a - b) < tol
 
+# ---- scenarios: odds lift / effect draws -----------------------------------
+
+check("lift_odds: OR of 1 leaves the probability unchanged", close_to(lift_odds(0.3, 1), 0.3))
+check("lift_odds: OR of 3 on p=0.5 gives 0.75", close_to(lift_odds(0.5, 3), 0.75))
+check("lift_odds: never leaves [0,1]", all(lift_odds(c(0, 0.5, 1), 1e6) <= 1 & lift_odds(c(0, 0.5, 1), 1e-6) >= 0))
+set.seed(1); d <- draw_or(2, 1.5, 2.67, 4000)
+check("draw_or: draws centre on the point estimate", close_to(median(d), 2, tol = 0.1))
+check("draw_or: about 95% of draws fall inside the CI", abs(mean(d > 1.5 & d < 2.67) - 0.95) < 0.02)
+check("draw_or: a missing CI yields no effect, not an error", all(draw_or(2, NA, NA, 5) == 1))
+
 # ---- boot_ci: bootstrap CI for a mean --------------------------------------
 
 set.seed(1)

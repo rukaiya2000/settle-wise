@@ -72,8 +72,10 @@
       </div>
       <p class="subtle intel-intro">Analysis of the historical book in R: a behavioural similarity network, statistics that test what
         it found, and one small model. Everything here is evidence for the agent - none of it can change an amount, a floor, or a status.
-        Two panels below reuse the same network and survival data through different lenses: a percolation/robustness check on the
-        network, and an epidemic-curve reframing of the survival analysis.</p>
+        Three panels below reuse the
+        same network and survival data through different lenses: a percolation/robustness check on the
+        network, an intervention-scenario sweep in the shape of impact network analysis, and an epidemic-curve
+        reframing of the survival analysis.</p>
 
       <div id="intelUnavailable" class="panel hidden"></div>
 
@@ -104,6 +106,25 @@
           as the baseline any network this size and density would show just from losing that many borrowers. If the targeted curve
           falls further than random's noise band, the bridges are structurally load-bearing at that point in the sweep.</p>
         <div id="robustnessNote" class="subtle network-def"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h3>Intervention scenarios</h3>
+          <select id="scenarioStrategy" class="scope-select" aria-label="Intervention"></select>
+        </div>
+        <span id="scenarioMeta" class="subtle"></span>
+        <canvas id="scenarioCanvas" width="900" height="320"></canvas>
+        <div id="scenarioLegend" class="network-legend"></div>
+        <div id="scenarioTable" class="intel-table"></div>
+        <p class="subtle intel-copy">Impact-network-style scenario analysis: give an intervention to <em>k</em> borrowers and ask
+          how many extra payments to expect, depending on <em>who</em> gets it. Each borrower it reaches (at their own historical
+          contact rate) has their payment odds multiplied by their segment&rsquo;s estimated effect from the findings above, drawn
+          from its confidence interval on every one of 200 realizations &mdash; so an effect that was not significant stays small and
+          noisy rather than being switched off. &ldquo;Random&rdquo; is the null: the same <em>k</em> chosen at random, shaded &plusmn;1 SD.
+          A rule only matters where its line leaves that band.</p>
+        <div id="scenarioCaveat" class="intel-callout"></div>
+        <div id="scenarioNote" class="subtle network-def"></div>
       </section>
 
       <section class="panel">

@@ -137,7 +137,7 @@ The prompt lives at [`server/agent/prompt.md`](./server/agent/prompt.md) and
 | `server/offer_engine.py` | what may be offered — the enforced limits |
 | `server/scheduler.py`, `demo_clock.py` | fake clock so 30 days replays in seconds |
 | `dashboard/` | operator UI — borrower list, profile, customer management (no build step, plain JS) |
-| `intelligence/`, `server/intelligence/` | the R analytics layer (network, statistics, ML) and the Python glue that extracts events for it and serves its output read-only |
+| `intelligence/`, `server/intelligence/` | the R analytics layer - behavioural similarity network, statistics, one small model, a percolation check on the network, an epidemic-curve reframing of the survival data, and an impact-network-style intervention-scenario sweep (`08_scenarios.R`: who to target, against a random null, over 200 realizations) - and the Python glue that extracts events for it and serves its output read-only |
 
 ## The demo clock
 

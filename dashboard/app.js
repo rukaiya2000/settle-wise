@@ -1234,7 +1234,7 @@ async function loadIntelligenceView() {
   }
   unavailable.classList.add("hidden");
 
-  const [portfolio, network, stats, strategies, models, epi, robustness] = await Promise.all([
+  const [portfolio, network, stats, strategies, models, epi, robustness, scenarios] = await Promise.all([
     api("/api/intelligence/portfolio"),
     api("/api/intelligence/network"),
     api("/api/intelligence/statistics"),
@@ -1242,6 +1242,7 @@ async function loadIntelligenceView() {
     api("/api/intelligence/models"),
     api("/api/intelligence/epidemiology"),
     api("/api/intelligence/robustness"),
+    api("/api/intelligence/scenarios"),
   ]);
   renderPortfolio(portfolio, status);
   renderNetwork(network);
@@ -1250,6 +1251,7 @@ async function loadIntelligenceView() {
   renderStrategies(strategies);
   renderModels(models);
   renderRobustness(robustness);
+  renderScenarios(scenarios);
   renderEpiCurve(epi.curve);
   renderReproduction(epi.reproduction);
   document.querySelector("#intelBuildStatus").textContent = status.network ? `built ${formatClock(status.network.built_at)}` : "";
@@ -1453,6 +1455,120 @@ function renderRobustness(data) {
   ]
     .map(([label, color]) => `<span><i class="swatch line" style="background:${color}"></i>${escapeHtml(label)}</span>`)
     .join("");
+}
+
+// Intervention scenarios (intelligence/R/08_scenarios.R). One strategy at a
+// time, chosen from the select; all four targeting rules drawn against the
+// random null's +-1 SD band, the same visual grammar as the robustness panel.
+let SCENARIO_ROWS = [];
+let SCENARIO_SUMMARY = [];
+const SCENARIO_STRATEGY_LABELS = {
+  evening: "Evening calling",
+  reminder: "SMS reminder before promised payment",
+  evening_reminder: "Evening calling + SMS reminder",
+};
+const SCENARIO_RULES = [
+  ["bridge", "bridge borrowers (highest betweenness first)", "--red"],
+  ["at_risk", "least likely to pay on their own", "--amber"],
+  ["reachable", "easiest to reach", "--blue"],
+  ["random", "random k (avg of 200 realizations, shaded ±1 SD)", "--subtle"],
+];
+
+function renderScenarios(data) {
+  SCENARIO_ROWS = (data && data.curve) || [];
+  SCENARIO_SUMMARY = (data && data.summary) || [];
+  const select = document.querySelector("#scenarioStrategy");
+  const strategies = [...new Set(SCENARIO_ROWS.map((r) => r.strategy))];
+  select.innerHTML = strategies
+    .map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(SCENARIO_STRATEGY_LABELS[s] || s)}</option>`)
+    .join("");
+  select.onchange = () => drawScenario(select.value);
+  if (!strategies.length) {
+    document.querySelector("#scenarioMeta").textContent = "not built yet - run make intelligence";
+    return;
+  }
+  const first = strategies.includes("evening") ? "evening" : strategies[0];
+  select.value = first;
+  drawScenario(first);
+}
+
+function drawScenario(strategy) {
+  const canvas = document.querySelector("#scenarioCanvas");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const rows = SCENARIO_ROWS.filter((r) => r.strategy === strategy);
+  const summary = SCENARIO_SUMMARY.find((s) => s.strategy === strategy) || {};
+  const byRule = Object.fromEntries(SCENARIO_RULES.map(([rule]) => [rule, rows.filter((r) => r.targeting === rule).sort((a, b) => a.k - b.k)]));
+  const signed = (v, d) => `${v >= 0 ? "+" : ""}${num(v, d)}`;
+
+  document.querySelector("#scenarioMeta").textContent = summary.k_ref != null
+    ? `at k = ${summary.k_ref}: best rule "${summary.best_targeting.replace(/_/g, " ")}" ${signed(summary.uplift_best, 1)} payers vs random ${signed(summary.uplift_random, 1)} · gap ${num(summary.gap_in_random_sd, 1)} SD · ${summary.n_reals} realizations`
+    : "";
+  document.querySelector("#scenarioNote").textContent = summary.interpretation || "";
+  document.querySelector("#scenarioCaveat").textContent = summary.limitation_note || "";
+  if (!rows.length) return;
+
+  const padL = 44, padR = 16, padT = 16, padB = 26;
+  const maxK = Math.max(...rows.map((r) => r.k));
+  const maxY = Math.max(1, ...rows.map((r) => r.uplift_mean + (r.uplift_sd || 0)));
+  const minY = Math.min(0, ...rows.map((r) => r.uplift_mean - (r.uplift_sd || 0)));
+  const sx = (k) => padL + (k / maxK) * (W - padL - padR);
+  const sy = (v) => padT + (1 - (v - minY) / (maxY - minY)) * (H - padT - padB);
+
+  ctx.strokeStyle = "rgba(60,70,85,0.18)";
+  ctx.fillStyle = themeColor("--subtle");
+  ctx.font = "10px system-ui";
+  ctx.lineWidth = 1;
+  const span = maxY - minY;
+  const step = span > 40 ? 10 : span > 16 ? 5 : span > 6 ? 2 : 1;
+  for (let v = Math.ceil(minY / step) * step; v <= maxY; v += step) {
+    const y = sy(v);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillText(signed(v, 0), 4, y + 3);
+  }
+  for (const r of byRule.random) ctx.fillText(String(r.k), sx(r.k) - 8, H - padB + 15);
+  ctx.fillText("borrowers targeted (k)", padL + (W - padL - padR) / 2 - 55, H - 4);
+  ctx.fillText("extra payers", padL, padT - 5);
+
+  // +-1 SD band around the random-targeting mean.
+  const rnd = byRule.random;
+  ctx.beginPath();
+  rnd.forEach((r, i) => { const x = sx(r.k), y = sy(r.uplift_mean + (r.uplift_sd || 0)); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+  for (let i = rnd.length - 1; i >= 0; i--) ctx.lineTo(sx(rnd[i].k), sy(rnd[i].uplift_mean - (rnd[i].uplift_sd || 0)));
+  ctx.closePath();
+  ctx.fillStyle = "rgba(60,70,85,0.22)";
+  ctx.fill();
+
+  for (const [rule, , token] of SCENARIO_RULES) {
+    const pts = byRule[rule];
+    if (!pts.length) continue;
+    ctx.beginPath();
+    ctx.strokeStyle = themeColor(token);
+    ctx.lineWidth = rule === "random" ? 1.5 : 2;
+    pts.forEach((r, i) => { const x = sx(r.k), y = sy(r.uplift_mean); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+    ctx.stroke();
+  }
+
+  document.querySelector("#scenarioLegend").innerHTML = SCENARIO_RULES
+    .map(([, label, token]) => `<span><i class="swatch line" style="background:${themeColor(token)}"></i>${escapeHtml(label)}</span>`)
+    .join("");
+
+  // The k = k_ref cross-section as numbers - a reader will want the figures
+  // behind the line they are looking at.
+  const kRef = summary.k_ref || 100;
+  const rndRow = byRule.random.find((r) => r.k === kRef);
+  const at = SCENARIO_RULES.map(([rule, label]) => ({ rule, label: label.replace(/ \(avg.*$/, ""), row: byRule[rule].find((r) => r.k === kRef) })).filter((x) => x.row);
+  document.querySelector("#scenarioTable").innerHTML = at.length
+    ? `<table><thead><tr><th>targeting, k = ${kRef}</th><th class="num">extra payers</th><th class="num">95% range</th><th class="num">extra $</th><th class="num">vs random</th></tr></thead><tbody>${at
+        .map(({ rule, label, row }) => {
+          const gap = rndRow ? row.uplift_mean - rndRow.uplift_mean : 0;
+          const gapSd = rndRow && rndRow.uplift_sd ? gap / rndRow.uplift_sd : 0;
+          return `<tr><td>${escapeHtml(label)}</td><td class="num">${signed(row.uplift_mean, 1)} <span class="ci">± ${num(row.uplift_sd, 1)}</span></td><td class="num">${num(row.uplift_ci_low, 0)} to ${num(row.uplift_ci_high, 0)}</td><td class="num">${money(row.dollars_uplift_mean)}</td><td class="num">${rule === "random" ? "-" : `${signed(gap, 1)} <span class="ci">(${num(gapSd, 1)} SD)</span>`}</td></tr>`;
+        })
+        .join("")}</tbody></table>`
+    : "";
 }
 
 let EPI_CURVE_ROWS = [];

@@ -5,7 +5,7 @@
 #   cd intelligence && Rscript run_all.R network    # one stage (after features)
 #
 # Stages, in order: features -> network -> epidemiology -> percolation ->
-# statistics -> model -> evaluate. Each stage writes its tables back to
+# statistics -> scenarios -> model -> evaluate. Each stage writes its tables back to
 # SQLite; the Python API only ever reads those tables, so once this
 # finishes the dashboard is live.
 #
@@ -21,13 +21,15 @@ if (!is.na(script)) setwd(dirname(normalizePath(script)))
 for (f in sort(list.files("R", full.names = TRUE))) source(f)
 
 t0 <- Sys.time()
-stages <- if (length(args)) args else c("features", "network", "epidemiology", "percolation", "statistics", "model", "evaluate")
+stages <- if (length(args)) args else c("features", "network", "epidemiology", "percolation", "statistics", "scenarios", "model", "evaluate")
 
 ctx <- run_features()
 if ("network" %in% stages) net <- run_network(ctx$features, ctx$borrowers) else net <- readRDS(file.path(OUTPUT_DIR, "network.rds"))
 if ("epidemiology" %in% stages) epi <- run_epidemiology(ctx, net)
 if ("percolation" %in% stages) perc <- run_percolation(net)
 if ("statistics" %in% stages) stats <- run_statistics(ctx, net)
+# After statistics: the scenario effects are the odds ratios it writes.
+if ("scenarios" %in% stages) scen <- run_scenarios(ctx, net)
 if ("model" %in% stages) model <- run_model(ctx, net)
 if ("evaluate" %in% stages) run_evaluation(ctx, net)
 

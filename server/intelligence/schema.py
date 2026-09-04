@@ -286,6 +286,48 @@ CREATE TABLE IF NOT EXISTS network_robustness_summary (
     created_at TEXT
 );
 
+-- Intervention scenario sweep (intelligence/R/08_scenarios.R): expected
+-- additional payers when k borrowers get an intervention, by targeting
+-- rule, against a random-targeting null, over stochastic realizations.
+CREATE TABLE IF NOT EXISTS scenario_outcomes (
+    graph_version TEXT NOT NULL,
+    scenario_version TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    targeting TEXT NOT NULL,
+    k INTEGER NOT NULL,
+    n_reals INTEGER,
+    payers_baseline REAL,
+    payers_mean REAL,
+    payers_sd REAL,
+    uplift_mean REAL,
+    uplift_sd REAL,
+    uplift_ci_low REAL,
+    uplift_ci_high REAL,
+    dollars_uplift_mean REAL,
+    dollars_uplift_sd REAL,
+    PRIMARY KEY (graph_version, scenario_version, strategy, targeting, k)
+);
+
+CREATE TABLE IF NOT EXISTS scenario_summary (
+    graph_version TEXT NOT NULL,
+    scenario_version TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    best_targeting TEXT,
+    uplift_best REAL,
+    uplift_best_sd REAL,
+    uplift_random REAL,
+    uplift_random_sd REAL,
+    gap_vs_random REAL,
+    gap_in_random_sd REAL,
+    meaningful INTEGER,
+    k_ref INTEGER,
+    n_reals INTEGER,
+    interpretation TEXT,
+    limitation_note TEXT,
+    created_at TEXT,
+    PRIMARY KEY (graph_version, scenario_version, strategy)
+);
+
 CREATE TABLE IF NOT EXISTS recommendations (
     recommendation_id TEXT PRIMARY KEY,
     debt_id TEXT NOT NULL,
@@ -314,6 +356,8 @@ R_OUTPUT_TABLES = [
     "epi_reproduction",
     "network_robustness",
     "network_robustness_summary",
+    "scenario_outcomes",
+    "scenario_summary",
 ]
 
 
