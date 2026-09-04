@@ -226,7 +226,13 @@ def _handle_end_of_call_report(message: dict) -> dict:
         logger.warning(f"[vapi end-of-call] could not identify debt_id for call={_call_id(message)}")
         return {"received": True, "stored": False, "reason": "missing debt_id"}
 
-    debt = agent_tools.get_debt_profile(debt_id)
+    # _debt_row, not get_debt_profile: this feeds analyze_post_call's LLM
+    # prompt directly (never spoken to the borrower), which needs the real
+    # amount_due - get_debt_profile is the agent-facing view that
+    # deliberately renames/hides it so the live conversation can't quote
+    # the whole balance, which made this KeyError on the very field this
+    # call site actually needs.
+    debt = agent_tools._debt_row(debt_id)
     if "error" in debt:
         logger.warning(f"[vapi end-of-call] unknown debt_id={debt_id} call={_call_id(message)}")
         return {"received": True, "stored": False, "reason": "unknown debt_id"}
