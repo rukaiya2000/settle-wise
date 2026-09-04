@@ -28,9 +28,12 @@ VAPI_VOICE_PROVIDER = os.getenv("VAPI_VOICE_PROVIDER", "openai")
 # No trailing slash, e.g. https://abcd1234.ngrok-free.app
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 
-# Gate on actually sending SMS (server/sms_client.py). Off by default so the
-# simulated demo loop never texts anyone; flip to true only for a live demo
-# call, once a provider is implemented.
+# Twilio, for SMS (server/sms_client.py). All three must be set for a real
+# send; LIVE_SMS gates whether one is attempted at all. Off by default so
+# the simulated demo loop never texts anyone.
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
+TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "")
 LIVE_SMS = os.getenv("LIVE_SMS", "false").lower() == "true"
 
 # Hackathon AI gateway (HTTP-only, /responses endpoint) - not used for the

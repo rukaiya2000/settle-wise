@@ -83,10 +83,11 @@ this server, where the offer engine and the database decide. An earlier
 version dialled over a BYO SIP trunk from a hackathon telephony provider;
 that provider has since been shut down and nothing depends on it.
 
-**SMS has no provider wired.** `server/sms_client.py` is a one-function
-seam. Texts are always recorded in the SMS history; they are only sent when
-`LIVE_SMS=true` *and* a provider (Twilio, Telnyx, ...) is implemented there.
-The demo never needs one.
+**SMS goes through Twilio** (`server/sms_client.py`, one REST call, no SDK).
+Texts are always recorded in the SMS history; one is only sent when
+`LIVE_SMS=true` and the three `TWILIO_*` values are set. The demo never
+needs it. US long-code messaging beyond a trial's verified numbers requires
+A2P 10DLC registration, which is a carrier rule, not a Twilio one.
 
 ## Repayment runs on a cycle
 
