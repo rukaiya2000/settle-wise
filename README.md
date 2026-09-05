@@ -156,9 +156,6 @@ Or talk to the agent in text, with every tool call printed:
 .venv/bin/python -m server.agent.console live_0002
 ```
 
-[SETUP.md](./SETUP.md) covers real calls (credentials and a public URL);
-[TESTING.md](./TESTING.md) has scripted scenarios.
-
 ## Repository
 
 | Path | What's in it |
