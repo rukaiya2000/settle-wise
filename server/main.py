@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import config
@@ -17,6 +18,14 @@ _dashboard_user, _ = resolve_credentials()
 app.add_middleware(SessionAuthMiddleware, username=_dashboard_user, public_demo=config.PUBLIC_DEMO)
 
 app.include_router(login.router)
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    # The bare domain used to fall through to a JSON 404; the product lives
+    # under /dashboard/.
+    return RedirectResponse(url="/dashboard/", status_code=302)
+
 app.include_router(dashboard.router)
 app.include_router(intelligence.router)
 app.include_router(demo_clock.router)
