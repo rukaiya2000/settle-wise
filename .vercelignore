@@ -7,3 +7,6 @@ data/*.db
 .venv/
 .github/
 *.rds
+api/pyproject.toml
+api/uv.lock
+api/.python-version
