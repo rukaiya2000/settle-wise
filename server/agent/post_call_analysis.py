@@ -8,9 +8,7 @@ of route-level keyword extractors.
 
 import json
 
-from openai import OpenAI
-
-from .. import config
+from .. import config, llm
 from ..demo_clock import get_demo_now
 
 OUTCOMES = {"answered", "no_answer", "callback_requested", "promised", "paid", "needs_review"}
@@ -18,17 +16,10 @@ NEXT_ACTIONS = {"none", "call_borrower", "send_sms_reminder", "human_review"}
 
 
 def analyze_post_call(debt: dict, transcript: str, ended_reason: str = "") -> dict:
-    if not config.OPENAI_POST_CALL_API_KEY:
-        raise RuntimeError("OPENAI_POST_CALL_API_KEY is not set")
-
-    client = OpenAI(
-        api_key=config.OPENAI_POST_CALL_API_KEY,
-        base_url=config.OPENAI_POST_CALL_BASE_URL,
-        timeout=30,
-    )
-    response = client.responses.create(
+    client = llm.chat_client(timeout=30)
+    response = client.chat.completions.create(
         model=config.OPENAI_POST_CALL_MODEL,
-        input=[
+        messages=[
             {
                 "role": "system",
                 "content": (
@@ -81,22 +72,10 @@ def analyze_post_call(debt: dict, transcript: str, ended_reason: str = "") -> di
 
 
 def _response_text(response) -> str:
-    if isinstance(getattr(response, "output_text", None), str):
-        return response.output_text
-
-    body = response.model_dump() if hasattr(response, "model_dump") else response
-    if isinstance(body.get("output_text"), str):
-        return body["output_text"]
-
-    chunks = []
-    for item in body.get("output", []):
-        for part in item.get("content", []):
-            if isinstance(part.get("text"), str):
-                chunks.append(part["text"])
-    if chunks:
-        return "".join(chunks)
-
-    raise RuntimeError(f"post-call analysis response had no text: {json.dumps(body)[:1000]}")
+    text = response.choices[0].message.content if response.choices else None
+    if not isinstance(text, str) or not text.strip():
+        raise RuntimeError("post-call analysis response had no text")
+    return text
 
 
 def _validate_analysis(text: str) -> dict:

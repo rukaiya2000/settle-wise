@@ -15,9 +15,7 @@ Usage:
 import json
 import sys
 
-from openai import OpenAI
-
-from .. import config
+from .. import config, llm
 from ..vapi_setup import _debt_context
 from . import SYSTEM_PROMPT
 from .tool_registry import TOOL_DEFS
@@ -43,12 +41,9 @@ def _to_openai_tools() -> list[dict]:
     ]
 
 
-def run_console(debt_id: str, model: str = "gpt-4.1"):
-    # config.py's load_dotenv() sets OPENAI_BASE_URL (the hackathon gateway,
-    # /responses only) into the process environment, which the openai SDK
-    # auto-picks-up for any client unless base_url is explicitly overridden
-    # here - this console needs real OpenAI's /chat/completions instead.
-    client = OpenAI(api_key=config.OPENAI_REALTIME_API_KEY, base_url="https://api.openai.com/v1")
+def run_console(debt_id: str, model: str | None = None):
+    model = model or config.OPENAI_CHAT_MODEL
+    client = llm.chat_client()
     tools = _to_openai_tools()
 
     messages = [

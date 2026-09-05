@@ -39,17 +39,16 @@ LIVE_SMS = os.getenv("LIVE_SMS", "false").lower() == "true"
 # Hackathon AI gateway (HTTP-only, /responses endpoint) - not used for the
 # voice agent itself since it can't proxy the realtime WebSocket API.
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+# Any OpenAI-compatible endpoint. Blank = OpenAI. A LiteLLM proxy such as
+# UF's NaviGator Toolkit (https://api.ai.it.ufl.edu) works unchanged, but
+# serves its own model names - set OPENAI_CHAT_MODEL to one it offers.
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "") or None
-OPENAI_POST_CALL_MODEL = os.getenv("OPENAI_POST_CALL_MODEL", "gpt-5.6-sol")
+# The chat/tool-calling model for the text console and post-call analysis.
+OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4.1")
+OPENAI_POST_CALL_MODEL = os.getenv("OPENAI_POST_CALL_MODEL", OPENAI_CHAT_MODEL)
 
-# Direct OpenAI key for the realtime speech-to-speech voice agent (wss://api.openai.com).
 OPENAI_REALTIME_API_KEY = os.getenv("OPENAI_REALTIME_API_KEY", "")
 OPENAI_REALTIME_MODEL = os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime-2.1")
-OPENAI_POST_CALL_API_KEY = os.getenv("OPENAI_POST_CALL_API_KEY", OPENAI_REALTIME_API_KEY or OPENAI_API_KEY)
-OPENAI_POST_CALL_BASE_URL = os.getenv(
-    "OPENAI_POST_CALL_BASE_URL",
-    "https://api.openai.com/v1" if OPENAI_REALTIME_API_KEY else (OPENAI_BASE_URL or "https://api.openai.com/v1"),
-)
 
 # Set DATABASE_URL to run on Postgres (Supabase, on the deployed instance);
 # leave it unset and everything uses the local SQLite file as before. Use
