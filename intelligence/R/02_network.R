@@ -79,12 +79,31 @@ run_network <- function(feats, borrowers) {
   log_step("network: %d nodes, %d edges, %d communities, modularity %.3f", vcount(g), ecount(g), length(unique(membership)), mod)
 
   # Degree-preserving null: is this modularity more than the degree
-  # sequence alone would give? Rewire keeps every node's degree, destroys
-  # the structure, then Louvain on that.
-  null_mod <- replicate(N_NULL, {
+  # sequence alone would give? Rewire keeps every node's degree and
+  # destroys the structure, then two questions of each rewired graph:
+  #
+  #  - null_mod: the modularity Louvain finds at the standard resolution
+  #    (1). This is the conventional degree-matched null - random graphs
+  #    of this size and density still have some modularity, and this is
+  #    how much. The evaluation's z-score is against this.
+  #  - null_mod_same: the same resolution-0.5 procedure used on the real
+  #    graph. At that resolution Louvain merges a random graph into one
+  #    community, so this is ~0 with ~no variance - which is why it must
+  #    not be the only null reported: a zero-variance null yields z = Inf
+  #    and looks broken (it was the only one here, once).
+  #
+  # Both weighted, as the observed modularity above is; rewiring keeps the
+  # weight attribute but detaches it from any structure.
+  nulls <- replicate(N_NULL, {
     gr <- rewire(g, with = keeping_degseq(niter = ecount(g) * 5))
-    modularity(gr, membership(cluster_louvain(gr, resolution = LOUVAIN_RESOLUTION)))
+    w <- E(gr)$weight
+    c(standard = modularity(gr, membership(cluster_louvain(gr, weights = w)), weights = w),
+      same = modularity(gr, membership(cluster_louvain(gr, weights = w, resolution = LOUVAIN_RESOLUTION)), weights = w))
   })
+  null_mod <- nulls["standard", ]
+  null_mod_same <- nulls["same", ]
+  log_step("network: degree-matched null modularity %.3f +- %.3f (same-procedure null %.3f +- %.3f)",
+           mean(null_mod), sd(null_mod), mean(null_mod_same), sd(null_mod_same))
 
   btw <- betweenness(g, weights = 1 / E(g)$weight, normalized = TRUE)
   deg <- degree(g)
@@ -182,7 +201,8 @@ run_network <- function(feats, borrowers) {
 
   metrics <- tibble(graph_version = GRAPH_VERSION, built_at = NOW, n_nodes = vcount(g), n_edges = ecount(g), k = K_NEIGHBOURS,
                     n_communities = length(unique(membership)), modularity = mod,
-                    null_modularity_mean = mean(null_mod), null_modularity_sd = sd(null_mod), ari_vs_truth = ari,
+                    null_modularity_mean = mean(null_mod), null_modularity_sd = sd(null_mod),
+                    null_same_procedure_mean = mean(null_mod_same), null_same_procedure_sd = sd(null_mod_same), ari_vs_truth = ari,
                     edge_definition = sprintf("cosine similarity on standardised [%s]; each node linked to its %d nearest; undirected", paste(NETWORK_FEATURES, collapse = ", "), K_NEIGHBOURS))
 
   write_table("borrower_segments", segments)

@@ -14,6 +14,11 @@ run_evaluation <- function(ctx, net) {
   findings <- read_table("statistical_findings")
   metrics <- read_table("network_metrics")
   registry <- read_table("model_registry")
+  # model_registry accumulates a row per model per run (append_table), so a
+  # second `make intelligence` - or the dashboard's Rebuild button - leaves
+  # several rows per model. Compare the latest run only; a multi-row champion
+  # made isTRUE(champion$pr_auc > baseline$pr_auc) FALSE and reported 5/6.
+  registry <- registry %>% filter(trained_at == max(trained_at))
   segs <- net$node_tbl %>% mutate(truth = unlist(truth$segments[debt_id]))
 
   # How pure is each discovered community, and which planted segment does

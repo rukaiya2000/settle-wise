@@ -1,0 +1,221 @@
+---
+title: "SettleWise - intelligence report"
+subtitle: "A behavioural similarity network, tested statistics, one small model and an intervention-scenario sweep, on a synthetic collections book with planted structure"
+date: today
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 2
+    theme: cosmo
+    fig-width: 8
+    fig-height: 4.5
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+suppressPackageStartupMessages({ library(DBI); library(RSQLite); library(dplyr); library(ggplot2); library(jsonlite); library(knitr) })
+root <- normalizePath("..")
+db_path <- Sys.getenv("DB_PATH", file.path(root, "data", "settlewise.db"))
+if (!grepl("^(/|[A-Za-z]:)", db_path)) db_path <- file.path(root, db_path)
+con <- dbConnect(SQLite(), db_path)
+tbl <- function(name) as_tibble(dbReadTable(con, name))
+pct <- function(x, d = 0) sprintf(paste0("%.", d, "f%%"), 100 * x)
+theme_set(theme_minimal(base_size = 12))
+metrics <- tbl("network_metrics"); segs <- tbl("segment_profiles"); nodes <- tbl("graph_nodes")
+findings <- tbl("statistical_findings"); registry <- tbl("model_registry") %>% filter(trained_at == max(trained_at))
+robust <- tbl("network_robustness"); robust_sum <- tbl("network_robustness_summary")
+scen <- tbl("scenario_outcomes"); scen_sum <- tbl("scenario_summary")
+epi <- tbl("epi_curve_daily"); r_eff <- tbl("epi_reproduction")
+borrowers <- tbl("intel_borrowers"); n_events <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM interaction_events")$n
+eval_path <- file.path(root, "intelligence", "output", "evaluation.json")
+evaluation <- if (file.exists(eval_path)) fromJSON(eval_path) else NULL
+```
+
+This is the same analysis the dashboard's Intelligence page shows, rendered from
+the same tables, as a document. Everything here is **evidence for a decision
+system, not the decision**: no number in this report can change an amount, a
+floor or an account status - `server/offer_engine.py` does that, deterministically.
+
+## Data
+
+`r format(sum(borrowers$cohort == "historical"), big.mark = ",")` synthetic historical
+borrowers and `r format(n_events, big.mark = ",")` interaction events, generated with
+**five planted behavioural communities** so that every method below can be scored
+against a known truth. That choice is deliberate and its cost is stated in the
+limitations: the effect sizes are properties of the generator, not of a real population.
+
+## Behavioural similarity network
+
+```{r network-metrics}
+m <- metrics[1, ]
+kable(tibble(
+  Metric = c("Nodes", "Edges", "k (nearest neighbours)", "Communities (Louvain)", "Modularity",
+             "Degree-matched null modularity (Louvain, resolution 1)", "Same-procedure null (resolution 0.5)", "ARI vs planted truth"),
+  Value = c(m$n_nodes, m$n_edges, m$k, m$n_communities, sprintf("%.3f", m$modularity),
+            sprintf("%.3f ± %.3f", m$null_modularity_mean, m$null_modularity_sd),
+            sprintf("%.3f ± %.3f", m$null_same_procedure_mean, m$null_same_procedure_sd),
+            sprintf("%.3f", m$ari_vs_truth))
+))
+```
+
+Edges are `r m$edge_definition`. The null model rewires the graph while
+preserving every node's degree, then asks how much modularity Louvain finds in
+the result. Two versions are reported on purpose: the conventional one (Louvain at
+resolution 1) is the comparison, and the observed modularity sits
+`r sprintf("%.0f", (m$modularity - m$null_modularity_mean) / m$null_modularity_sd)` standard
+deviations above it. The same-procedure null - the resolution-0.5 detection this
+pipeline actually uses - collapses a random graph into one community, so it is ~0
+with ~no variance; on its own it would look like overwhelming evidence and be
+nothing of the kind.
+
+```{r network-plot, fig.height=6}
+ggplot(nodes, aes(x, y, colour = segment_label, alpha = ifelse(paid == 1, 1, 0.35))) +
+  geom_point(size = 1.4) + scale_alpha_identity() +
+  geom_point(data = filter(nodes, is_bridge == 1), shape = 21, size = 3, colour = "black", fill = NA) +
+  labs(colour = NULL, title = "Force-directed layout, coloured by community; ringed = top-5% betweenness (bridge borrowers); faded = did not pay") +
+  theme_void(base_size = 11) + theme(legend.position = "bottom", plot.title = element_text(size = 10))
+```
+
+```{r segments}
+segs %>% arrange(community) %>%
+  transmute(Segment = segment_label, n, `Paid` = pct(payment_rate), `95% CI` = sprintf("%s-%s", pct(ci_low), pct(ci_high)),
+            `Picks up` = pct(contact_success_rate), `Best window` = sprintf("%s (%s)", best_bucket, pct(best_bucket_rate)),
+            `Median days to payment` = round(median_days_to_payment)) %>% kable()
+```
+
+## Statistical findings
+
+Every finding carries its sample size and interval; p-values are Benjamini-Hochberg
+adjusted across the family, and confidence intervals come from a borrower-clustered
+bootstrap because call attempts within a borrower are not independent.
+
+```{r findings}
+findings %>% arrange(analysis_name, finding_id) %>%
+  transmute(Question = question, Segment = coalesce(segment_label, "all"), n = sample_size,
+            Effect = sprintf("%s %.2f", effect_label, effect_size),
+            `95% CI` = ifelse(is.na(ci_low), "", sprintf("%.2f-%.2f", ci_low, ci_high)),
+            `adj. p` = ifelse(p_adjusted < 0.001, "< 0.001", sprintf("%.3f", p_adjusted)),
+            Significant = ifelse(significant == 1, "yes", "no")) %>% kable()
+```
+
+The pooled evening-contact effect hides its own structure: the odds ratio is large
+in one segment and indistinguishable from 1 in three others, which is the case for
+targeting rather than a blanket policy. The nulls are reported too - the Cox hazard
+ratios for contact strategy on time to payment are not significant, and weekday does
+nothing.
+
+## Predictive model
+
+Payment within seven days of a contact attempt, on features computed **as of** the
+attempt (nothing from the future leaks in; the scaler is fit on the training split
+only). Elastic-net logistic regression against gradient-boosted trees, champion
+chosen on validation PR-AUC, scored on a held-out test split of attempts.
+
+```{r model}
+registry %>% arrange(desc(is_champion), desc(pr_auc)) %>%
+  transmute(Model = model_name, `Train` = n_train, `Test` = n_test, `ROC-AUC` = sprintf("%.3f", roc_auc),
+            `PR-AUC` = sprintf("%.3f", pr_auc), Brier = sprintf("%.3f", brier), Champion = ifelse(is_champion == 1, "yes", "")) %>% kable()
+```
+
+```{r calibration, fig.height=4}
+ch <- registry %>% filter(is_champion == 1) %>% slice(1)
+cal <- fromJSON(ch$calibration_json)
+ggplot(cal, aes(mean_pred, observed)) + geom_abline(linetype = "dashed", colour = "grey60") +
+  geom_line(colour = "#3564c7") + geom_point(aes(size = n), colour = "#3564c7") +
+  coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
+  labs(x = "mean predicted probability", y = "observed rate", size = "attempts", title = sprintf("Calibration of the champion (%s), test split", ch$model_name))
+```
+
+The model is modest - a test ROC-AUC of `r sprintf("%.2f", ch$roc_auc)` - and is shown as such. It is
+evidence for a recommendation the offer engine may decline, not a decision.
+
+## Epidemic-curve reframing
+
+The survival data restated as counts over calendar time: every historical account
+moves susceptible → active → recovered (paid) or escalated. **This is not an
+epidemic** - nothing transmits between borrowers. R_eff = β × contact rate × duration
+is a load indicator on the collections process, not a forecast of growth.
+
+```{r epi, fig.height=4}
+epi %>% filter(segment_label == "All segments") %>% mutate(day = as.Date(day)) %>%
+  tidyr::pivot_longer(c(n_susceptible, n_active, n_recovered, n_escalated), names_to = "state", values_to = "n") %>%
+  mutate(state = factor(sub("n_", "", state), levels = c("susceptible", "active", "recovered", "escalated"))) %>%
+  ggplot(aes(day, n, fill = state)) + geom_area(alpha = 0.85) +
+  scale_fill_manual(values = c("#cfd8e3", "#3564c7", "#166534", "#991b1b")) + labs(x = NULL, y = "accounts", fill = NULL)
+```
+
+```{r reff}
+r_eff %>% transmute(Segment = segment_label, n, `β (conversion per attempt)` = sprintf("%.3f", beta),
+                    `contacts / active day` = sprintf("%.2f", c_contacts_per_active_day), `duration (RMST, days)` = sprintf("%.1f", d_days),
+                    `R_eff` = sprintf("%.2f (%.2f-%.2f)", r_eff, r_eff_ci_low, r_eff_ci_high)) %>% kable()
+```
+
+## Network robustness (percolation)
+
+```{r percolation, fig.height=4}
+rs <- robust_sum[1, ]
+ggplot(robust, aes(removal_fraction, lcc_fraction, colour = strategy)) +
+  geom_ribbon(data = filter(robust, strategy == "random"), aes(ymin = pmax(0, lcc_fraction - lcc_fraction_sd), ymax = pmin(1, lcc_fraction + lcc_fraction_sd)), fill = "grey80", colour = NA) +
+  geom_line(linewidth = 1) + scale_colour_manual(values = c(targeted = "#991b1b", random = "grey40")) +
+  scale_x_continuous(labels = scales::percent) + scale_y_continuous(labels = scales::percent) +
+  labs(x = "borrowers removed", y = "largest connected component", colour = NULL)
+```
+
+`r rs$interpretation`
+
+## Intervention scenarios (impact-network style)
+
+The question impact network analysis asks: give an intervention to *k* borrowers -
+which *k*? Where it starts is a targeting rule and budget; whether it takes hold is
+the borrower's own historical contact rate; the effect and its uncertainty are the
+segment odds ratios above, drawn from their confidence intervals on each of
+`r scen_sum$n_reals[1]` realizations; common random numbers make every rule a
+paired comparison against a random-*k* null.
+
+```{r scenarios, fig.height=7}
+scen %>% mutate(strategy = factor(strategy, levels = c("evening", "reminder", "evening_reminder"),
+                                  labels = c("Evening calling", "SMS reminder", "Evening + reminder"))) %>%
+  ggplot(aes(k, uplift_mean, colour = targeting)) +
+  geom_ribbon(data = . %>% filter(targeting == "random"), aes(ymin = uplift_mean - uplift_sd, ymax = uplift_mean + uplift_sd), fill = "grey85", colour = NA) +
+  geom_line(linewidth = 1) + facet_wrap(~strategy, ncol = 1, scales = "free_y") +
+  scale_colour_manual(values = c(bridge = "#991b1b", at_risk = "#92400e", reachable = "#1e40af", random = "grey40")) +
+  labs(x = "borrowers targeted (k)", y = "expected additional payers", colour = "targeting")
+```
+
+```{r scenario-summary}
+scen_sum %>% transmute(Intervention = strategy, `Best rule (k = k_ref)` = best_targeting,
+                       `Uplift` = sprintf("%+.1f ± %.1f", uplift_best, uplift_best_sd), `Random` = sprintf("%+.1f ± %.1f", uplift_random, uplift_random_sd),
+                       `Gap (random SDs)` = sprintf("%.1f", gap_in_random_sd), Meaningful = ifelse(meaningful == 1, "yes", "no")) %>% kable()
+```
+
+`r scen_sum$interpretation[scen_sum$strategy == "evening"]`
+
+What this deliberately lacks is INA's second layer: nothing spreads between
+borrowers, so there is no dispersal network - and that is exactly why targeting by
+network position equals random here. Position on a similarity network says who
+resembles whom, not who will respond.
+
+## Evaluation against the planted truth
+
+```{r evaluation}
+if (!is.null(evaluation)) {
+  checks <- c("modularity_beats_null", "evening_effect_found_in_delayed", "reminder_effect_found", "segments_differ_in_payment", "weekday_null_stayed_null", "model_beats_baseline")
+  kable(tibble(Check = checks, Result = ifelse(unlist(evaluation[checks]), "pass", "FAIL")))
+} else cat("evaluation.json not found - run `make intelligence`.")
+```
+
+## Limitations
+
+- **Synthetic data.** What transfers is the method and its checks, not the numbers.
+- **ARI `r sprintf("%.2f", m$ari_vs_truth)` is moderate**; the generator plants noise and recovery is partial by design.
+- **The model is modest**, and the scenario baseline is the segment's observed payment rate, not a per-borrower score: scoring the training borrowers would be in-sample.
+- **Single-layer network**; no transmission, so no dispersal layer.
+- **Odds ratios estimated on pick-up and promise completion are applied to payment odds directly** in the scenarios, which overstates the effect wherever a pick-up gain does not convert.
+
+```{r close}
+invisible(dbDisconnect(con))
+```

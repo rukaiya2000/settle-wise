@@ -1292,7 +1292,7 @@ function renderNetwork(net) {
   const edges = net.edges || [];
   const m = net.metrics || {};
   document.querySelector("#networkMeta").textContent = m.n_nodes
-    ? `${m.n_nodes} borrowers · ${m.n_edges} edges · ${m.n_communities} communities · modularity ${num(m.modularity, 2)} (null ${num(m.null_modularity_mean, 2)} ± ${num(m.null_modularity_sd, 2)})${m.ari_vs_truth != null ? ` · ARI vs planted ${num(m.ari_vs_truth, 2)}` : ""}`
+    ? `${m.n_nodes} borrowers · ${m.n_edges} edges · ${m.n_communities} communities · modularity ${num(m.modularity, 2)} vs degree-matched null ${num(m.null_modularity_mean, 2)} ± ${num(m.null_modularity_sd, 2)}${m.ari_vs_truth != null ? ` · ARI vs planted ${num(m.ari_vs_truth, 2)}` : ""}`
     : "";
   document.querySelector("#networkDefinition").textContent = m.edge_definition ? `Edge: ${m.edge_definition}` : "";
   if (!nodes.length) return;

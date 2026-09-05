@@ -42,7 +42,7 @@ never has. The cost of that choice is stated under limitations.
 | Stage | What it does | Result |
 | --- | --- | --- |
 | `01_features.R` | Per-borrower behaviour vector from the event log: contact rates by time of day, objection/refusal/promise rates, call volume | 1,000 x 8 |
-| `02_network.R` | Cosine similarity on the standardised vector, each node linked to its 20 nearest, **Louvain** communities; a degree-preserving rewiring null model for modularity | 13,079 edges, 5 communities, modularity **0.68** (rewired null ~0), ARI vs planted truth **0.42** |
+| `02_network.R` | Cosine similarity on the standardised vector, each node linked to its 20 nearest, **Louvain** communities; a degree-preserving rewiring null model for modularity | 13,079 edges, 5 communities, modularity **0.68** against a degree-matched rewiring null of **0.17 ± 0.004**, ARI vs planted truth **0.42** |
 | `03_statistics.R` | Hypothesis tests with **borrower-clustered bootstrap** CIs and **Benjamini-Hochberg** adjustment; nothing is reported without its n and interval | Evening calls raise pick-up, OR **1.84** (1.73-1.97, n = 15,902) - but the effect is concentrated: **7.05** in one segment, ~1.0 in three others. SMS reminder before a promised payment: OR **2.27** (1.94-2.65) |
 | `04_model.R` | Payment-within-7-days on **as-of** features (no future leakage; scaler fit on train only); elastic-net vs gradient boosting, champion chosen on validation PR-AUC, calibration reported | Test ROC-AUC **0.69**, PR-AUC 0.43, Brier 0.17 on 2,804 held-out attempts - modest, and shown as such |
 | `05_evaluation.R` | Scores segments and predictions against the planted truth | ARI, per-segment payment rates vs the generator |
@@ -76,7 +76,11 @@ says who resembles whom, not who will respond.
 - **Synthetic data.** Effect sizes are properties of the generator, not of
   any real population. What transfers is the method and its checks.
 - **ARI 0.42 is moderate.** The generator plants noise; recovery is partial by
-  design, and the null model is what shows the structure is real.
+  design, and the degree-matched null is what shows the structure is real.
+  (An earlier version reported that null as 0.00 ± 0.00 - Louvain at the
+  detection resolution collapses a random graph to one community, a
+  zero-variance null that looked like evidence and wasn't. Both nulls are
+  now computed and the conventional one is the comparison.)
 - **The model is modest** (AUC 0.69), and the scenario panel's baseline is
   the segment's observed rate rather than a per-borrower score - scoring the
   1,000 borrowers the model was trained on would be in-sample.

@@ -8,7 +8,11 @@
 #   make test          Python + R tests
 #   make run           start the API + dashboard
 
-PY := .venv/bin/python
+# The local pipeline always runs on the SQLite file. With DATABASE_URL set in
+# .env (for the deployment), `make extract` would otherwise write to Postgres
+# while R reads SQLite. scripts/sync_intelligence.py is the one path to
+# Postgres, and it reads DATABASE_URL on purpose.
+PY := DATABASE_URL= .venv/bin/python
 RSCRIPT := Rscript
 QUARTO := $(shell command -v quarto 2>/dev/null || echo $(HOME)/.local/bin/quarto)
 SEED ?= 42
@@ -32,8 +36,10 @@ extract:
 intelligence: extract
 	cd intelligence && $(RSCRIPT) run_all.R
 
+# Rendered into dashboard/ so the deployed site serves it at /dashboard/report.html;
+# the HTML is committed because the deployment has no R.
 report:
-	cd intelligence && $(QUARTO) render report.qmd
+	cd intelligence && $(QUARTO) render report.qmd --output report.html && mv report.html ../dashboard/report.html
 
 test: test-py test-r
 

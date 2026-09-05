@@ -132,6 +132,20 @@ button.ghost {
 
 button.ghost:hover { background: var(--hover); }
 
+/* An <a> styled as a ghost button, for links that sit in a button cluster. */
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-h);
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  text-decoration: none;
+}
+.button-link:hover { background: var(--hover); }
+
 .btn-danger {
   background: var(--red-bg);
   color: var(--red);

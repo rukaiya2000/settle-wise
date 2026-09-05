@@ -190,8 +190,10 @@ CREATE TABLE IF NOT EXISTS network_metrics (
     k INTEGER,
     n_communities INTEGER,
     modularity REAL,
-    null_modularity_mean REAL,
+    null_modularity_mean REAL,   -- Louvain at resolution 1 on degree-preserving rewirings
     null_modularity_sd REAL,
+    null_same_procedure_mean REAL,  -- the resolution-0.5 procedure on the same rewirings (~0)
+    null_same_procedure_sd REAL,
     ari_vs_truth REAL,
     edge_definition TEXT
 );
