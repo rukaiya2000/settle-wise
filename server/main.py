@@ -20,6 +20,13 @@ app.add_middleware(SessionAuthMiddleware, username=_dashboard_user, public_demo=
 app.include_router(login.router)
 
 
+@app.get("/dashboard", include_in_schema=False)
+def dashboard_no_slash():
+    # StaticFiles serves index.html at /dashboard too, but the page's relative
+    # asset paths then resolve against /, so it arrives with no CSS or JS.
+    return RedirectResponse(url="/dashboard/", status_code=302)
+
+
 @app.get("/", include_in_schema=False)
 def root():
     # The bare domain used to fall through to a JSON 404; the product lives
