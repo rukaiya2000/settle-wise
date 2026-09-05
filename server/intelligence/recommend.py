@@ -37,7 +37,7 @@ def _one(conn, sql, *args):
 
 
 def intelligence_available(conn) -> bool:
-    return conn.execute("SELECT COUNT(*) FROM borrower_features").fetchone()[0] > 0
+    return conn.execute("SELECT COUNT(*) AS n FROM borrower_features").fetchone()["n"] > 0
 
 
 def borrower_intelligence(debt_id: str) -> dict:

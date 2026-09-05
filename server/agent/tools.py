@@ -164,10 +164,10 @@ def verify_account_ref(debt_id: str, last4: str) -> dict:
     today = get_demo_now().strftime("%Y-%m-%d")
     with get_conn() as conn:
         failed = conn.execute(
-            "SELECT COUNT(*) FROM agent_actions WHERE debt_id = ? AND tool = 'verify_account_ref' "
+            "SELECT COUNT(*) AS n FROM agent_actions WHERE debt_id = ? AND tool = 'verify_account_ref' "
             "AND result = 'failed' AND substr(at, 1, 10) = ?",
             (debt_id, today),
-        ).fetchone()[0]
+        ).fetchone()["n"]
     if failed >= MAX_REF_ATTEMPTS_PER_DAY:
         return {"verified": False, "locked": True}
 
@@ -288,10 +288,10 @@ def _payment_links_today(debt_id: str) -> int:
     today = get_demo_now().strftime("%Y-%m-%d")
     with get_conn() as conn:
         return conn.execute(
-            "SELECT COUNT(*) FROM sms_messages WHERE debt_id = ? AND type = 'payment_link' "
+            "SELECT COUNT(*) AS n FROM sms_messages WHERE debt_id = ? AND type = 'payment_link' "
             "AND substr(sent_at, 1, 10) = ?",
             (debt_id, today),
-        ).fetchone()[0]
+        ).fetchone()["n"]
 
 def send_sms_payment_link(debt_id: str, amount: float, reason: str = "", live: bool | None = None) -> dict:
     """Create a payment link and text it.

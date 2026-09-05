@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS agent_actions (
 
 CREATE TABLE IF NOT EXISTS demo_clock (
     id INTEGER PRIMARY KEY CHECK (id = 1),
-    current_time TEXT NOT NULL,
+    "current_time" TEXT NOT NULL,  -- quoted: a reserved word in Postgres
     timezone TEXT NOT NULL DEFAULT 'America/Los_Angeles',
     speed TEXT NOT NULL DEFAULT 'paused'
 );
@@ -159,6 +159,9 @@ class _PgConn:
     def executescript(self, sql: str):
         # psycopg runs a multi-statement string fine as long as nothing is
         # bound to it - which is exactly how SCHEMA is used.
+        # SQLite's REAL is 8 bytes; Postgres's is 4 (min ~1e-38), which
+        # underflows on BH-adjusted p-values. Widen the type on this side only.
+        sql = re.sub(r"\bREAL\b", "DOUBLE PRECISION", sql)
         self._conn.execute(sql.replace("%", "%%"))
         return self
 
@@ -169,11 +172,30 @@ class _PgConn:
         self._conn.close()
 
 
+class _Row(dict):
+    """A Postgres row with sqlite3.Row's dual access: row["col"] and row[0].
+    Every query in this codebase was written against sqlite3.Row, and a few
+    read the first column positionally (COUNT(*) results in particular);
+    a plain dict raised KeyError: 0 for those on the deployed database."""
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return list(self.values())[key]
+        return super().__getitem__(key)
+
+
+def _sqlite_like_row(cursor):
+    names = [d.name for d in cursor.description] if cursor.description else []
+    return lambda values: _Row(zip(names, values))
+
+
 def _connect_pg():
     import psycopg
-    from psycopg.rows import dict_row
 
-    return _PgConn(psycopg.connect(config.DATABASE_URL, row_factory=dict_row, autocommit=False))
+    # prepare_threshold=None: the transaction pooler (port 6543) routes each
+    # statement to any free backend, so psycopg's automatic server-side
+    # prepared statements collide ("prepared statement _pg3_0 already exists").
+    return _PgConn(psycopg.connect(config.DATABASE_URL, row_factory=_sqlite_like_row, autocommit=False, prepare_threshold=None))
 
 
 # `current_time` is a column on demo_clock and a reserved word in Postgres,

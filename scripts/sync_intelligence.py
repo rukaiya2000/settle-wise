@@ -42,7 +42,7 @@ def main():
     src = sqlite3.connect(sqlite_path)
     src.row_factory = sqlite3.Row
 
-    with psycopg.connect(config.DATABASE_URL) as dst:
+    with psycopg.connect(config.DATABASE_URL, prepare_threshold=None) as dst:
         for table in TABLES:
             try:
                 rows = src.execute(f"SELECT * FROM {table}").fetchall()
