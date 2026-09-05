@@ -12,3 +12,5 @@ python-dotenv==1.2.2
 python-multipart==0.0.32
 psycopg[binary]==3.3.5
 requests==2.34.2
+loguru==0.7.3
+openai==2.52.0

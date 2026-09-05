@@ -1,0 +1,10 @@
+# Only the FastAPI app and the static dashboard deploy. The R layer runs
+# locally and its output is pushed with scripts/sync_intelligence.py.
+intelligence/
+tests/
+md/
+data/*.db
+data/synthetic/
+.venv/
+.github/
+*.rds
