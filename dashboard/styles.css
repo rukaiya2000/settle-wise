@@ -1039,3 +1039,30 @@ button.ghost:hover { background: var(--hover); }
   .review-item { grid-template-columns: 1fr; gap: 4px; }
   .finding { grid-template-columns: 1fr; }
 }
+
+/* ---- Loading feedback ---------------------------------------------------
+   A thin bar across the top while any request is in flight (html.busy is
+   toggled by api() in app.js), and placeholder rows so a table or panel
+   never sits empty while its data is on the way. */
+#loadbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 0;
+  background: var(--accent);
+  opacity: 0;
+  z-index: 1000;
+  transition: opacity 0.2s;
+}
+html.busy #loadbar {
+  opacity: 1;
+  animation: loadbar 1.2s ease-in-out infinite;
+}
+@keyframes loadbar {
+  0% { width: 0; margin-left: 0; }
+  50% { width: 60%; margin-left: 20%; }
+  100% { width: 0; margin-left: 100%; }
+}
+.placeholder { color: var(--subtle); }
+.placeholder td { padding: 28px 14px; text-align: center; }

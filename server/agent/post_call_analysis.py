@@ -8,7 +8,7 @@ of route-level keyword extractors.
 
 import json
 
-from .. import config, llm
+from .. import config
 from ..demo_clock import get_demo_now
 
 OUTCOMES = {"answered", "no_answer", "callback_requested", "promised", "paid", "needs_review"}
@@ -16,6 +16,8 @@ NEXT_ACTIONS = {"none", "call_borrower", "send_sms_reminder", "human_review"}
 
 
 def analyze_post_call(debt: dict, transcript: str, ended_reason: str = "") -> dict:
+    from .. import llm  # lazy: openai is ~half the import cost of a cold start, and only this path needs it
+
     client = llm.chat_client(timeout=30)
     response = client.chat.completions.create(
         model=config.OPENAI_POST_CALL_MODEL,

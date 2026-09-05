@@ -64,7 +64,24 @@ function emptyToNull(value) {
   return value === "" || value === undefined ? null : value;
 }
 
+// In-flight request count drives the top progress bar (#loadbar): visible
+// while anything is loading, gone when the last response lands.
+let inflight = 0;
+function busy(delta) {
+  inflight = Math.max(0, inflight + delta);
+  document.documentElement.classList.toggle("busy", inflight > 0);
+}
+
 async function api(path, options) {
+  busy(1);
+  try {
+    return await apiRaw(path, options);
+  } finally {
+    busy(-1);
+  }
+}
+
+async function apiRaw(path, options) {
   const res = await fetch(path, {
     ...options,
     headers: { "Content-Type": "application/json", ...(options && options.headers) },
@@ -177,6 +194,9 @@ function startLabel(iso) {
 }
 
 async function loadDebts() {
+  if (!debts.length) {
+    document.querySelector("#debtTable").innerHTML = '<tr class="placeholder"><td colspan="7">Loading borrowers…</td></tr>';
+  }
   // The summary is optional: if the R layer hasn't run, the table just
   // shows no segment badges rather than failing to load.
   [debts, intelSummary] = await Promise.all([api("/api/debts"), api("/api/intelligence/summary").catch(() => ({}))]);
@@ -1218,14 +1238,16 @@ function renderIntelPanel(intel) {
 
 async function loadIntelligenceView() {
   const unavailable = document.querySelector("#intelUnavailable");
-  let status;
+  document.querySelector("#intelMetrics").innerHTML = '<div class="metric placeholder"><div class="label">Loading analysis…</div></div>';
+  let view;
   try {
-    status = await api("/api/intelligence/status");
+    view = await api("/api/intelligence/view");
   } catch (err) {
     unavailable.classList.remove("hidden");
     unavailable.innerHTML = `Could not reach the intelligence API: ${escapeHtml(err.message)}`;
     return;
   }
+  const status = view.status;
   if (!status.available) {
     unavailable.classList.remove("hidden");
     unavailable.innerHTML = `The intelligence layer has not been built yet. Run <code>make intelligence</code> (or click Rebuild) - it extracts live events and runs the R pipeline.`;
@@ -1234,16 +1256,7 @@ async function loadIntelligenceView() {
   }
   unavailable.classList.add("hidden");
 
-  const [portfolio, network, stats, strategies, models, epi, robustness, scenarios] = await Promise.all([
-    api("/api/intelligence/portfolio"),
-    api("/api/intelligence/network"),
-    api("/api/intelligence/statistics"),
-    api("/api/intelligence/strategies"),
-    api("/api/intelligence/models"),
-    api("/api/intelligence/epidemiology"),
-    api("/api/intelligence/robustness"),
-    api("/api/intelligence/scenarios"),
-  ]);
+  const { portfolio, network, statistics: stats, strategies, models, epidemiology: epi, robustness, scenarios } = view;
   renderPortfolio(portfolio, status);
   renderNetwork(network);
   renderSegments(stats.segments);

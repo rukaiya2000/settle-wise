@@ -12,7 +12,7 @@ import json
 import shutil
 import subprocess
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
 from .. import config
 from ..db import get_conn, row_to_dict, rows_to_dicts
@@ -128,6 +128,8 @@ def network():
         nodes = rows_to_dicts(conn, "SELECT * FROM graph_nodes")
         edges = rows_to_dicts(conn, "SELECT * FROM graph_edges")
         segments = rows_to_dicts(conn, "SELECT * FROM segment_profiles ORDER BY community")
+    for e in edges:  # 15-decimal weights were a third of a 1.1MB payload
+        e["weight"] = round(e["weight"], 3)
     return {"metrics": metrics, "nodes": nodes, "edges": edges, "segments": segments}
 
 
@@ -161,6 +163,25 @@ def scenarios():
         curve = rows_to_dicts(conn, "SELECT * FROM scenario_outcomes ORDER BY strategy, targeting, k")
         summary = rows_to_dicts(conn, "SELECT * FROM scenario_summary ORDER BY strategy")
     return {"curve": curve, "summary": summary}
+
+
+@router.get("/view")
+def view(response: Response):
+    """Everything the Intelligence page needs in one response.
+
+    The page used to make eight parallel requests; on a serverless cold
+    visit that is eight Python instances booting at once. One request is
+    one boot and one database connection, and the tables behind it only
+    change on a rebuild or sync, so the edge may cache it briefly."""
+    response.headers["Cache-Control"] = "public, s-maxage=120, stale-while-revalidate=600"
+    st = status()
+    if not st.get("available"):
+        return {"status": st}
+    return {
+        "status": st, "portfolio": portfolio(), "network": network(), "statistics": statistics(),
+        "strategies": strategies(), "models": models(), "epidemiology": epidemiology(),
+        "robustness": robustness(), "scenarios": scenarios(),
+    }
 
 
 @router.get("/portfolio")
