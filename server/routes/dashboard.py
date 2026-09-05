@@ -7,7 +7,7 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
-from .. import offer_engine
+from .. import config, offer_engine
 from ..agent import tools as agent_tools
 from ..agent.simulated_call import run_simulated_call
 from ..db import get_conn
@@ -87,6 +87,9 @@ def list_debts():
 
 @router.post("/api/debts")
 def create_debt(req: DebtCreateRequest):
+    with get_conn() as conn:
+        if conn.execute("SELECT COUNT(*) AS n FROM debts").fetchone()["n"] >= config.MAX_DEBTS:
+            raise HTTPException(409, f"the demo book is full ({config.MAX_DEBTS} customers); reset it or delete some")
     if req.amount_due <= 0:
         raise HTTPException(400, "amount_due must be positive")
     _validate_phone(req.phone)

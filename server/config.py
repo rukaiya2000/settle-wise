@@ -19,6 +19,10 @@ VAPI_ASSISTANT_ID = os.getenv("VAPI_ASSISTANT_ID", "")
 # models from its own list and rejects "gpt-realtime-2.1".
 # Set VAPI_MODEL=gpt-4.1 in .env to fall back to the cascade pipeline.
 VAPI_MODEL = os.getenv("VAPI_MODEL", "gpt-realtime-2025-08-28")
+# Shared secret Vapi sends as X-Vapi-Secret on every webhook. When unset the
+# webhooks refuse everything - on a deployment with no Vapi they must not be
+# an open door for executing agent tools.
+VAPI_WEBHOOK_SECRET = os.getenv("VAPI_WEBHOOK_SECRET", "")
 # Realtime only supports OpenAI's own voices (alloy, echo, shimmer, marin,
 # cedar); on a cascade model any provider works. VAPI_VOICE_PROVIDER lets
 # you swap TTS without touching code if articulation is poor.
@@ -61,6 +65,16 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 # destructive and real-telephony routes stay behind the login either way
 # (server/auth.py:PROTECTED_ALWAYS).
 PUBLIC_DEMO = os.getenv("PUBLIC_DEMO", "false").lower() == "true"
+
+# Abuse limits for a public deployment (server/ratelimit.py). Per client IP,
+# fixed windows, counted in the database so they hold across serverless
+# instances. GETs are never limited.
+RATE_LIMIT_WRITES_PER_MIN = int(os.getenv("RATE_LIMIT_WRITES_PER_MIN", "60"))
+RATE_LIMIT_LOGIN_PER_MIN = int(os.getenv("RATE_LIMIT_LOGIN_PER_MIN", "5"))
+RATE_LIMIT_CLOCK_PER_MIN = int(os.getenv("RATE_LIMIT_CLOCK_PER_MIN", "10"))
+RATE_LIMIT_CREATE_PER_HOUR = int(os.getenv("RATE_LIMIT_CREATE_PER_HOUR", "20"))
+MAX_DEBTS = int(os.getenv("MAX_DEBTS", "300"))
+DEMO_CLOCK_MAX_ADVANCE_DAYS = int(os.getenv("DEMO_CLOCK_MAX_ADVANCE_DAYS", "30"))
 
 # The voice stack (pipecat and its ~570MB of transitive deps: onnxruntime,
 # llvmlite, cv2, av, numba) is only needed for the in-browser WebRTC demo; outbound calling through Vapi doesn't touch

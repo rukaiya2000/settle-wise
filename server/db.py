@@ -94,6 +94,14 @@ CREATE TABLE IF NOT EXISTS agent_actions (
     at TEXT NOT NULL
 );
 
+-- Fixed-window request counters, one row per (bucket, client). Updated in
+-- place, so it never grows beyond distinct clients x buckets.
+CREATE TABLE IF NOT EXISTS rate_limits (
+    key TEXT PRIMARY KEY,
+    window_start INTEGER NOT NULL,
+    count INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS demo_clock (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     "current_time" TEXT NOT NULL,  -- quoted: a reserved word in Postgres

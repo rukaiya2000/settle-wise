@@ -25,6 +25,8 @@ import time
 
 from starlette.responses import RedirectResponse, Response
 
+from . import ratelimit
+
 # Prefix-matched, not exact - each of these owns every path under it.
 PUBLIC_PATH_PREFIXES = (
     "/health",
@@ -167,6 +169,19 @@ class SessionAuthMiddleware:
             return
 
         path = scope["path"]
+        if scope["type"] == "http":
+            bucket = ratelimit.classify(scope.get("method", "GET"), path)
+            if bucket is not None:
+                allowed, retry_after = ratelimit.check(bucket, ratelimit.client_ip(scope))
+                if not allowed:
+                    response = Response(
+                        status_code=429,
+                        content='{"error":"too many requests, slow down"}',
+                        media_type="application/json",
+                        headers={"Retry-After": str(retry_after)},
+                    )
+                    await response(scope, receive, send)
+                    return
         open_to_anyone = any(path.startswith(p) for p in self.public_prefixes) or (
             self.public_demo and not _is_protected(path)
         )

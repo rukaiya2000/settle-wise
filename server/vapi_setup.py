@@ -93,7 +93,7 @@ def _assistant_body() -> dict:
                     "required": t["required"],
                 },
             },
-            "server": {"url": f"{config.PUBLIC_BASE_URL}/api/vapi/tools"},
+            "server": {"url": f"{config.PUBLIC_BASE_URL}/api/vapi/tools", **({"secret": config.VAPI_WEBHOOK_SECRET} if config.VAPI_WEBHOOK_SECRET else {})},
         }
         for t in TOOL_DEFS
     ]
@@ -108,7 +108,7 @@ def _assistant_body() -> dict:
         "firstMessage": "Hello, this is Settle Wise calling about your account. Am I speaking with the account holder?",
         # end-of-call-report carries the transcript and summary; without it a
         # real call leaves no readable record on the borrower's page.
-        "server": {"url": f"{config.PUBLIC_BASE_URL}/api/vapi/events"},
+        "server": {"url": f"{config.PUBLIC_BASE_URL}/api/vapi/events", **({"secret": config.VAPI_WEBHOOK_SECRET} if config.VAPI_WEBHOOK_SECRET else {})},
         "serverMessages": ["end-of-call-report"],
         # A live phone call can't tolerate the dead air of several sequential
         # tool round-trips before the agent speaks - the first attempt died to

@@ -12,12 +12,13 @@ implementation in server/agent/tools.py.
 
 import json
 import re
+import secrets
 import time
 import uuid
 from datetime import datetime, timezone
 
 import requests
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from loguru import logger
 
 from .. import config
@@ -28,6 +29,17 @@ from ..db import get_conn
 from ..demo_clock import get_demo_now
 
 router = APIRouter()
+
+
+def _require_vapi_secret(request: Request) -> None:
+    """Vapi sends the assistant's server secret as X-Vapi-Secret. Without a
+    configured secret these routes refuse everything: on a deployment with no
+    Vapi they would otherwise let anyone execute agent tools by POSTing a
+    Vapi-shaped payload."""
+    expected = config.VAPI_WEBHOOK_SECRET
+    supplied = request.headers.get("x-vapi-secret", "")
+    if not expected or not secrets.compare_digest(supplied, expected):
+        raise HTTPException(403, "webhook secret missing or wrong")
 
 TOOLS_BY_NAME = {t["name"]: t for t in TOOL_DEFS}
 
@@ -67,7 +79,8 @@ def call_borrower(debt_id: str, background_tasks: BackgroundTasks):
 
 
 @router.post("/api/vapi/tools")
-async def vapi_tool_webhook(body: dict):
+async def vapi_tool_webhook(body: dict, request: Request):
+    _require_vapi_secret(request)
     """Vapi posts both tool calls and assistant server messages here.
 
     Only tool-calls expect Vapi's special {"results": [...]} response. End of
@@ -150,7 +163,8 @@ def _record_action(tool: str, arguments: dict, result, source: str = "voice", de
 
 
 @router.post("/api/vapi/events")
-async def vapi_event_webhook(body: dict):
+async def vapi_event_webhook(body: dict, request: Request):
+    _require_vapi_secret(request)
     """Vapi server events. end-of-call-report carries the final transcript and
     summary; persist it even if the agent did not call our state-changing tools
     before the call ended."""

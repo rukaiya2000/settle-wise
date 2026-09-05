@@ -1,6 +1,6 @@
 """Demo clock controls."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from .. import demo_clock
@@ -24,7 +24,10 @@ def get_demo_clock():
 
 @router.post("/api/demo-clock/advance")
 def advance_demo_clock(body: AdvanceRequest):
-    return demo_clock.advance_demo_clock(body.amount, body.unit)
+    result = demo_clock.advance_demo_clock(body.amount, body.unit)
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    return result
 
 
 @router.post("/api/demo-clock/set")

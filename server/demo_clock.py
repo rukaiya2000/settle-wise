@@ -56,6 +56,11 @@ def advance_demo_clock(amount: int, unit: str) -> dict:
 
     if unit not in UNIT_DELTAS:
         return {"error": f"unsupported unit '{unit}', expected 'hour' or 'day'"}
+    # Advancing fires every due action for every borrower; unbounded, it is
+    # the most expensive thing an anonymous visitor can ask for.
+    max_units = config.DEMO_CLOCK_MAX_ADVANCE_DAYS * (24 if unit == "hour" else 1)
+    if not isinstance(amount, int) or amount < 1 or amount > max_units:
+        return {"error": f"amount must be between 1 and {max_units} {unit}s"}
 
     new_now = get_demo_now() + UNIT_DELTAS[unit](amount)
     set_demo_clock(new_now.isoformat())
